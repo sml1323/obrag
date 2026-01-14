@@ -1,0 +1,9 @@
+testdoc/*
+reference/*
+/.venv/
+/.ruff_cache/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+.env
