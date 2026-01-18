@@ -9,6 +9,7 @@
 - [x] **프로젝트 구조 설정**: Python 프로젝트 구조, 의존성 관리(Poetry/pip), 테스트 환경 구축
 - [/] **ETL 파이프라인 구축**: Markdown 파싱, YAML 메타데이터 추출, 본문 Chunking 로직 구현
   - [x] **Markdown Preprocessor**: 헤더 기반 Semantic Chunking, YAML frontmatter 추출, 코드 블록 보호
+  - [x] **Folder Scanner**: 폴더 재귀 탐색, 파일 메타데이터(폴더 경로, 파일명) 추출
 - [ ] **Vector DB 연동**: ChromaDB 설정 및 임베딩 저장/조회 기능 구현
 - [ ] **증분 동기화(Sync)**: 파일 해시/수정시간 비교 기반 변경 파일만 업데이트하는 로직
 

@@ -202,6 +202,7 @@ def _split_by_paragraphs(text: str, max_size: int) -> List[str]:
 def semantic_chunk(
     text: str,
     source: str,
+    extra_metadata: Optional[dict] = None,  # 폴더 경로 등 추가 메타데이터
     min_size: int = MIN_CHUNK_SIZE,
     max_size: int = MAX_CHUNK_SIZE,
     chunk_level: int = 2,  # 기본 청킹 레벨 (##)
@@ -212,6 +213,7 @@ def semantic_chunk(
     Args:
         text: 마크다운 텍스트
         source: 원본 파일명
+        extra_metadata: 추가 메타데이터 (예: folder_path, full_path)
         min_size: 최소 청크 크기 (이보다 짧으면 병합)
         max_size: 최대 청크 크기 (이보다 길면 분할)
         chunk_level: 청킹 기준 헤더 레벨 (기본: 2 = ##)
@@ -231,15 +233,15 @@ def semantic_chunk(
     if not header_marks:
         # 헤더가 없으면 전체를 하나의 청크로
         restored_body = restore_code_blocks(body, code_placeholders)
-        return [Chunk(
-            text=restored_body.strip(),
-            metadata={
-                "source": source,
-                "header_path": "",
-                "headers": [],
-                "frontmatter": frontmatter.__dict__ if frontmatter else None,
-            }
-        )]
+        base_metadata = {
+            "source": source,
+            "header_path": "",
+            "headers": [],
+            "frontmatter": frontmatter.__dict__ if frontmatter else None,
+        }
+        if extra_metadata:
+            base_metadata.update(extra_metadata)
+        return [Chunk(text=restored_body.strip(), metadata=base_metadata)]
     
     # 4. 섹션별로 텍스트 분할
     chunks: List[Chunk] = []
@@ -268,6 +270,10 @@ def semantic_chunk(
             "headers": [header.title],
             "level": header.level,
         }
+        
+        # 추가 메타데이터 병합 (folder_path, full_path 등)
+        if extra_metadata:
+            metadata.update(extra_metadata)
         
         if frontmatter:
             metadata["frontmatter"] = {
