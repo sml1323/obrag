@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "chromadb>=1.4.0",
+    "debugpy>=1.8.19",
     "langchain-chroma>=1.1.0",
     "langchain-community>=0.4.1",
     "numpy>=2.4.1",

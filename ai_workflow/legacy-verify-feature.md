@@ -24,33 +24,26 @@
 테스트가 통과했다면, 구현 과정에서 얻은 지식을 `docs/spec/findings.md`에 기록하세요. (파일이 없으면 생성하세요)
 
 **[Action: findings.md 업데이트]**
-다음 항목 중 해당하는 것이 있다면 기록을 남기세요: (없으면 생략 가능)
+다음 항목 중 해당하는 것이 있다면 기록을 남기세요:
 1.  **기술적 의사결정 (Decisions)**: "왜 A 라이브러리 대신 B를 썼는가?", "왜 이 구조를 선택했는가?"
 2.  **트러블슈팅 (Troubleshooting)**: "어떤 에러가 발생했고, 어떻게 해결했는가?" (미래의 나를 위한 메모)
 3.  **외부 지식 (Discoveries)**: 검색을 통해 알게 된 새로운 API 사용법이나 문법.
 
 ---
 
-## 3단계: 로드맵 및 상태 갱신 (Update Roadmap)
+## 3단계: 진행 상황 로그 (Progress Logging)
 
-별도의 로그 파일 없이, **`docs/spec/roadmap.md` 하나로 상태를 관리**합니다.
-로드맵 파일을 열고 다음 두 가지를 수행하세요.
+작업 내용을 `docs/spec/progress.md`에 기록하여, 다음 세션에서 즉시 복귀할 수 있도록 하세요. (파일이 없으면 생성하세요)
 
-1.  **Task 완료 처리**: 해당 Task 체크박스 `[x]` 변경.
-2.  **Last Context 업데이트**: 로드맵 최상단(또는 해당 Phase 아래)에 **마지막 작업 요약**을 1~2줄로 갱신하세요.
+**[Action: progress.md 업데이트]**
+다음 포맷으로 로그를 남기세요:
 
-    *(예시: roadmap.md 상단)*
-    ```markdown
-    # Project Roadmap
-    > **Last Update**: 2024-05-20 14:00
-    > **Current Status**: `login_api` 구현 완료. 다음은 `auth_middleware` 구현 예정.
-    > **Note**: JWT 토큰 만료 시간 설정에 주의 필요 (`findings.md` 참고).
-    ```
-# 4단계: 완료 리포트
+```markdown
+### [YYYY-MM-DD HH:MM] - [Sub-task Name]
+- **Status**: ✅ Complete
+- **Changes**: `src/수정된파일.py`, `src/tasktests/테스트파일.py`
+- **Note**: [특이사항이나 다음 작업자를 위한 코멘트]
+```
 
-> ✅ **검증 완료**
-> - **테스트**: Pass
-> - **로드맵**: `[x] [Task]` 갱신 완료
-> - **지식 저장**: `findings.md` (필요 시)
->
-> **Current Context**: [로드맵에 적은 한 줄 요약]
+
+

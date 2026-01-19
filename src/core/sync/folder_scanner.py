@@ -87,14 +87,13 @@ class FolderScanner:
     
     def _should_ignore(self, path: Path) -> bool:
         """경로가 무시 패턴에 해당하는지 확인"""
-        for part in path.parts:
+        for part in path.parts[:-1]:  # 마지막(파일명) 제외, 폴더만 체크
+            # .으로 시작하는 모든 폴더 제외 (숨김 폴더)
+            if part.startswith("."):
+                return True
+            # 명시적 제외 패턴
             if part in self.ignore_patterns:
                 return True
-            # 숨김 폴더 (.으로 시작) 제외 - 단, .md 파일은 허용
-            if part.startswith(".") and part not in self.ignore_patterns:
-                # 파일이 아닌 폴더인 경우만 제외
-                if not path.is_file():
-                    return True
         return False
     
     def scan(self) -> List[ScannedFile]:
