@@ -1,7 +1,7 @@
 # Product Roadmap
 
-> **Last Update**: 2026-01-20 10:05
-> **Current Status**: Phase 1 완료. 증분 동기화(`IncrementalSyncer`) 구현 및 테스트 통과. 다음은 Phase 2 RAG 채팅 기능.
+> **Last Update**: 2026-01-20 13:06
+> **Current Status**: Phase 2 임베딩 모델 통합 완료 (Factory 패턴 적용). 다음은 멀티 LLM 지원 구현 예정.
 > **Note**: ChromaDB 메타데이터에 리스트 포함 시 JSON 변환 필요 (`findings.md` 참고)
 
 > 이 로드맵은 프로젝트의 큰 흐름을 정의합니다. 세부 태스크는 각 단계가 진행됨에 따라 동적으로 생성됩니다.
@@ -21,7 +21,7 @@
 
 ## Phase 2: RAG 채팅 기능 (Intelligent Chat)
 
-- [ ] **임베딩 모델 통합**: BGE-M3(로컬) / text-embedding-3-small(클라우드) 선택 가능
+- [x] **임베딩 모델 통합**: BGE-M3(로컬) / text-embedding-3-small(클라우드) 선택 가능
 - [ ] **멀티 LLM 지원**: OpenAI, Gemini, Ollama 연동 및 전환 기능
 - [ ] **RAG 파이프라인**: 벡터 검색 + 컨텍스트 주입 + LLM 응답 생성
 - [ ] **FastAPI 백엔드**: REST API 엔드포인트 구현

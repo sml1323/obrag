@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-01-20: 임베딩 모델 통합 (Embedding Model Integration)
+
+### Decisions (기술적 의사결정)
+
+#### 1. Factory 패턴 도입
+- **결정**: `EmbedderFactory`를 통해 Config 기반으로 임베더 생성
+- **이유**: 
+  - DI(의존성 주입) 원칙 준수
+  - 테스트 시 `FakeEmbedder`로 쉽게 교체 가능
+  - 향후 로컬 모델(BGE-M3) 추가 시 Config만 변경하면 됨
+- **사용법**:
+  ```python
+  from core.embedding import EmbedderFactory
+  from config.models import OpenAIEmbeddingConfig
+  
+  config = OpenAIEmbeddingConfig(model_name="text-embedding-3-small")
+  embedder = EmbedderFactory.create(config)
+  ```
+
+#### 2. LocalEmbedder Skeleton 전략
+- **결정**: 실제 모델 로딩 없이 `NotImplementedError` 반환
+- **이유**: Phase 2에서는 OpenAI 우선, 로컬 모델은 추후 구현
+- **주의**: `LocalEmbedder.embed()` 호출 시 예외 발생함
+
+---
+
+### Discoveries (외부 지식)
+
+#### ChromaDB EmbeddingFunction 어댑터
+- ChromaDB는 자체 `EmbeddingFunction` 인터페이스 사용
+- `_EmbeddingFunctionAdapter`로 `EmbeddingStrategy`를 ChromaDB 호환 형태로 변환
+- Warning: `DeprecationWarning: legacy embedding function config` 발생 (무시 가능)
+
+---
+
 ## 2026-01-20: 증분 동기화 (Incremental Sync)
 
 ### Decisions (기술적 의사결정)
