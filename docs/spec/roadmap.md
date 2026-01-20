@@ -1,5 +1,9 @@
 # Product Roadmap
 
+> **Last Update**: 2026-01-20 10:05
+> **Current Status**: Phase 1 완료. 증분 동기화(`IncrementalSyncer`) 구현 및 테스트 통과. 다음은 Phase 2 RAG 채팅 기능.
+> **Note**: ChromaDB 메타데이터에 리스트 포함 시 JSON 변환 필요 (`findings.md` 참고)
+
 > 이 로드맵은 프로젝트의 큰 흐름을 정의합니다. 세부 태스크는 각 단계가 진행됨에 따라 동적으로 생성됩니다.
 
 ---
@@ -7,11 +11,11 @@
 ## Phase 1: 핵심 기반 마련 (Core Infrastructure)
 
 - [x] **프로젝트 구조 설정**: Python 프로젝트 구조, 의존성 관리(Poetry/pip), 테스트 환경 구축
-- [/] **ETL 파이프라인 구축**: Markdown 파싱, YAML 메타데이터 추출, 본문 Chunking 로직 구현
+- [x] **ETL 파이프라인 구축**: Markdown 파싱, YAML 메타데이터 추출, 본문 Chunking 로직 구현
   - [x] **Markdown Preprocessor**: 헤더 기반 Semantic Chunking, YAML frontmatter 추출, 코드 블록 보호
   - [x] **Folder Scanner**: 폴더 재귀 탐색, 파일 메타데이터(폴더 경로, 파일명) 추출
 - [x] **Vector DB 연동**: ChromaDB 설정 및 임베딩 저장/조회 기능 구현
-- [ ] **증분 동기화(Sync)**: 파일 해시/수정시간 비교 기반 변경 파일만 업데이트하는 로직
+- [x] **증분 동기화(Sync)**: 파일 해시/수정시간 비교 기반 변경 파일만 업데이트하는 로직
 
 ---
 

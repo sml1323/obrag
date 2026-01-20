@@ -211,6 +211,130 @@ class ChromaStore:
         """
         self._collection.delete(where={"source": source})
     
+    # ========================================================================
+    # Incremental Sync Methods
+    # ========================================================================
+    
+    @staticmethod
+    def generate_deterministic_id(relative_path: str, chunk_index: int) -> str:
+        """
+        파일 경로 + 청크 인덱스 기반 deterministic ID 생성.
+        
+        증분 동기화에서 upsert가 정상 동작하도록 동일 파일의 동일 청크는
+        항상 같은 ID를 가집니다.
+        
+        Args:
+            relative_path: 루트 기준 상대 경로
+            chunk_index: 청크 인덱스 (0부터 시작)
+        
+        Returns:
+            "relative/path.md::chunk_0" 형태의 ID
+        """
+        return f"{relative_path}::chunk_{chunk_index}"
+    
+    def upsert_chunks(self, chunks: List, relative_path: str) -> int:
+        """
+        청크를 upsert (있으면 업데이트, 없으면 추가).
+        
+        증분 동기화용 메서드. deterministic ID를 사용하여
+        동일 파일의 청크가 변경되어도 기존 청크를 덮어씁니다.
+        
+        Args:
+            chunks: Chunk 객체 리스트
+            relative_path: 루트 기준 상대 경로 (ID 생성에 사용)
+        
+        Returns:
+            upsert된 청크 수
+        """
+        if not chunks:
+            return 0
+        
+        documents = []
+        metadatas = []
+        ids = []
+        
+        for idx, chunk in enumerate(chunks):
+            chunk_id = self.generate_deterministic_id(relative_path, idx)
+            
+            documents.append(chunk.text)
+            # ChromaDB 호환 메타데이터로 변환
+            metadatas.append(self._normalize_metadata(chunk.metadata))
+            ids.append(chunk_id)
+        
+        # ChromaDB upsert (있으면 update, 없으면 insert)
+        self._collection.upsert(
+            documents=documents,
+            metadatas=metadatas,
+            ids=ids,
+        )
+        
+        return len(documents)
+    
+    @staticmethod
+    def _normalize_metadata(metadata: dict) -> dict:
+        """
+        ChromaDB 호환 메타데이터로 변환.
+        
+        ChromaDB는 메타데이터 값으로 str, int, float, bool, None만 허용.
+        리스트/딕셔너리는 JSON 문자열로 변환합니다.
+        
+        Args:
+            metadata: 원본 메타데이터
+        
+        Returns:
+            정규화된 메타데이터
+        """
+        import json
+        
+        normalized = {}
+        for key, value in metadata.items():
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                normalized[key] = value
+            elif isinstance(value, (list, dict)):
+                # 리스트/딕셔너리는 JSON 문자열로 변환
+                normalized[key] = json.dumps(value, ensure_ascii=False)
+            else:
+                # 기타 타입은 문자열로 변환
+                normalized[key] = str(value)
+        return normalized
+    
+    def delete_by_relative_path(self, relative_path: str) -> None:
+        """
+        특정 파일(relative_path)의 모든 청크 삭제.
+        
+        메타데이터의 relative_path 필드를 기준으로 삭제합니다.
+        
+        Args:
+            relative_path: 삭제할 파일의 상대 경로
+        """
+        self._collection.delete(where={"relative_path": relative_path})
+    
+    def delete_chunks_by_prefix(self, relative_path: str, from_index: int) -> None:
+        """
+        특정 파일의 특정 인덱스 이상 청크 삭제.
+        
+        파일 수정 후 청크 수가 줄었을 때, 기존 초과 청크를 정리합니다.
+        
+        Args:
+            relative_path: 파일 상대 경로
+            from_index: 이 인덱스부터 삭제 (0-based)
+        """
+        # ID 패턴 기반으로 삭제할 청크 ID 목록 생성
+        # ChromaDB에서 prefix 기반 삭제가 어려우므로, 개별 ID로 삭제
+        ids_to_delete = []
+        
+        # 최대 1000개 청크까지 지원 (충분히 큰 수)
+        for i in range(from_index, from_index + 1000):
+            chunk_id = self.generate_deterministic_id(relative_path, i)
+            ids_to_delete.append(chunk_id)
+        
+        # 존재하지 않는 ID는 ChromaDB가 무시함
+        try:
+            self._collection.delete(ids=ids_to_delete)
+        except Exception:
+            # 삭제할 ID가 없으면 무시
+            pass
+    
     def __repr__(self) -> str:
         return f"ChromaStore(collection='{self.collection_name}', count={self._collection.count()})"
 
