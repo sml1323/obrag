@@ -7,7 +7,7 @@
 ## 🔄 Processing Pipeline
 
 ![alt text](../images/image.png)
-[code](../../src/core/preprocessing/markdown_preprocessor.py)
+[code link](../../src/core/preprocessing/markdown_preprocessor.py)
 
 ---
 
@@ -160,23 +160,6 @@ More text
 
 마크다운을 헤더 기반으로 Semantic Chunking합니다.
 
-```mermaid
-flowchart TD
-    A[semantic_chunk] --> B{헤더 레벨 체크}
-    B --> |"level <= chunk_level"| C[새 청크 시작]
-    B --> |"level > chunk_level"| D[현재 청크에 병합]
-
-    C --> E{청크 크기 체크}
-    D --> E
-
-    E --> |"< min_size"| F[이전 청크와 병합]
-    E --> |"> max_size"| G[문단 단위 분할]
-    E --> |"적정 크기"| H[그대로 저장]
-
-    F --> I["List[Chunk]"]
-    G --> I
-    H --> I
-```
 
 | Parameter        | Type   | Default    | Description                         |
 | ---------------- | ------ | ---------- | ----------------------------------- |
