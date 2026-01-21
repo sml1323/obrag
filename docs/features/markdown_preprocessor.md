@@ -1,33 +1,13 @@
 # MarkdownPreprocessor
+
 마크다운 텍스트를 RAG 시스템용으로 전처리하는 모듈입니다.
 
 ---
 
 ## 🔄 Processing Pipeline
 
-```mermaid
-flowchart LR
-    subgraph Input
-        MD["📄 Markdown Text"]
-    end
-    
-    subgraph Pipeline["Processing Pipeline"]
-        A["1️⃣ extract_frontmatter()"]
-        B["2️⃣ protect_code_blocks()"]
-        C["3️⃣ extract_header_marks()"]
-        D["4️⃣ semantic_chunk()"]
-    end
-    
-    subgraph Output
-        CHUNKS["📦 List[Chunk]"]
-    end
-    
-    MD --> A
-    A --> |"YAMLFrontmatter + body"| B
-    B --> |"protected text + placeholders"| C
-    C --> |"List[HeaderMark]"| D
-    D --> CHUNKS
-```
+![alt text](../images/image.png)
+[code](../../src/core/preprocessing/markdown_preprocessor.py)
 
 ---
 
@@ -35,28 +15,28 @@ flowchart LR
 
 ### YAMLFrontmatter
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `raw` | `str` | 원본 YAML 문자열 |
-| `tags` | `List[str]` | 태그 목록 |
-| `create_date` | `Optional[str]` | 생성일 |
-| `extra` | `dict` | 기타 메타데이터 |
+| Field         | Type            | Description      |
+| ------------- | --------------- | ---------------- |
+| `raw`         | `str`           | 원본 YAML 문자열 |
+| `tags`        | `List[str]`     | 태그 목록        |
+| `create_date` | `Optional[str]` | 생성일           |
+| `extra`       | `dict`          | 기타 메타데이터  |
 
 ### HeaderMark
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `position` | `int` | 문서 내 시작 위치 |
-| `end_position` | `int` | 헤더 라인 끝 위치 |
-| `level` | `int` | 헤더 레벨 (1-6) |
-| `title` | `str` | 헤더 제목 |
-| `path` | `List[str]` | 상위 헤더 포함 경로 (breadcrumb) |
+| Field          | Type        | Description                      |
+| -------------- | ----------- | -------------------------------- |
+| `position`     | `int`       | 문서 내 시작 위치                |
+| `end_position` | `int`       | 헤더 라인 끝 위치                |
+| `level`        | `int`       | 헤더 레벨 (1-6)                  |
+| `title`        | `str`       | 헤더 제목                        |
+| `path`         | `List[str]` | 상위 헤더 포함 경로 (breadcrumb) |
 
 ### Chunk
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `text` | `str` | 청크 텍스트 |
+| Field      | Type   | Description                                  |
+| ---------- | ------ | -------------------------------------------- |
+| `text`     | `str`  | 청크 텍스트                                  |
 | `metadata` | `dict` | 메타데이터 (source, headers, frontmatter 등) |
 
 ---
@@ -71,6 +51,7 @@ YAML frontmatter를 추출하고 본문에서 제거합니다.
 <summary><b>Input/Output 예시</b></summary>
 
 **Input:**
+
 ```markdown
 ---
 tags:
@@ -78,11 +59,14 @@ tags:
   - NLP
 create: 2024-01-01
 ---
+
 # Title
+
 Content here...
 ```
 
 **Output:** `Tuple[YAMLFrontmatter, str]`
+
 ```python
 (
     YAMLFrontmatter(
@@ -94,6 +78,7 @@ Content here...
     "# Title\nContent here..."
 )
 ```
+
 </details>
 
 ---
@@ -106,16 +91,19 @@ Content here...
 <summary><b>Input/Output 예시</b></summary>
 
 **Input:**
-```markdown
+
+````markdown
 Some text
 
 ```python
 def hello():
     print("world")
 ```
+````
 
 More text
-```
+
+````
 
 **Output:** `Tuple[str, List[Tuple[str, str]]]`
 ```python
@@ -125,7 +113,8 @@ More text
         ("__CODE_BLOCK_0__", "```python\ndef hello():\n    print(\"world\")\n```")
     ]
 )
-```
+````
+
 </details>
 
 ---
@@ -138,15 +127,21 @@ More text
 <summary><b>Input/Output 예시</b></summary>
 
 **Input:**
+
 ```markdown
 # Transformer
+
 ## Architecture
+
 ### Encoder
+
 ### Decoder
+
 ## Training
 ```
 
 **Output:** `List[HeaderMark]`
+
 ```python
 [
     HeaderMark(position=0,  level=1, title="Transformer", path=["Transformer"]),
@@ -156,6 +151,7 @@ More text
     HeaderMark(position=51, level=2, title="Training", path=["Transformer", "Training"]),
 ]
 ```
+
 </details>
 
 ---
@@ -169,32 +165,33 @@ flowchart TD
     A[semantic_chunk] --> B{헤더 레벨 체크}
     B --> |"level <= chunk_level"| C[새 청크 시작]
     B --> |"level > chunk_level"| D[현재 청크에 병합]
-    
+
     C --> E{청크 크기 체크}
     D --> E
-    
+
     E --> |"< min_size"| F[이전 청크와 병합]
     E --> |"> max_size"| G[문단 단위 분할]
     E --> |"적정 크기"| H[그대로 저장]
-    
+
     F --> I["List[Chunk]"]
     G --> I
     H --> I
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `text` | `str` | *required* | 마크다운 텍스트 |
-| `source` | `str` | *required* | 원본 파일명 |
-| `extra_metadata` | `dict` | `None` | 추가 메타데이터 |
-| `min_size` | `int` | `200` | 최소 청크 크기 (이보다 짧으면 병합) |
-| `max_size` | `int` | `1500` | 최대 청크 크기 (이보다 길면 분할) |
-| `chunk_level` | `int` | `2` | 청킹 기준 헤더 레벨 (## = 2) |
+| Parameter        | Type   | Default    | Description                         |
+| ---------------- | ------ | ---------- | ----------------------------------- |
+| `text`           | `str`  | _required_ | 마크다운 텍스트                     |
+| `source`         | `str`  | _required_ | 원본 파일명                         |
+| `extra_metadata` | `dict` | `None`     | 추가 메타데이터                     |
+| `min_size`       | `int`  | `200`      | 최소 청크 크기 (이보다 짧으면 병합) |
+| `max_size`       | `int`  | `1500`     | 최대 청크 크기 (이보다 길면 분할)   |
+| `chunk_level`    | `int`  | `2`        | 청킹 기준 헤더 레벨 (## = 2)        |
 
 <details>
 <summary><b>Input/Output 예시</b></summary>
 
 **Input:**
+
 ```python
 text = """
 ---
@@ -223,6 +220,7 @@ chunks = semantic_chunk(
 ```
 
 **Output:** `List[Chunk]`
+
 ```python
 [
     Chunk(
@@ -247,6 +245,7 @@ chunks = semantic_chunk(
     )
 ]
 ```
+
 </details>
 
 ---

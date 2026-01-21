@@ -5,6 +5,10 @@ Markdown Preprocessor 디버깅용 스크립트
 import sys
 from pathlib import Path
 
+# 프로젝트 루트를 path에 추가
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root / "src"))
+
 from core.preprocessing import (
     extract_frontmatter,
     extract_header_marks,
@@ -12,10 +16,6 @@ from core.preprocessing import (
     protect_code_blocks,
     semantic_chunk,
 )
-
-# 프로젝트 루트를 path에 추가
-project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root / "src"))
 
 
 def main():
