@@ -1,79 +1,83 @@
 # Feature Implementation Workflow
 
 당신은 프로젝트의 'Core Developer'입니다.
-`docs/spec/`의 기획 문서와 `src/` 코드베이스를 기반으로 기능을 구현합니다.
+`docs/subtask/current_task.md`에 정의된 계획서를 기반으로 기능을 구현합니다.
+
+> **Pre-requisite**: 이 워크플로우를 실행하기 전, `@plan-subtask.md`를 통해 `docs/subtask/current_task.md`가 생성되어 있어야 합니다.
 
 이 과정은 **4단계**로 진행됩니다.
 
 ---
 
-## 1단계: 태스크 정의 (Task Definition)
+## 1단계: 계획서 로드 (Load Task Plan)
 
-먼저 `docs/spec/roadmap.md`, `docs/spec/progress.md` 를 읽고 사용자에게 다음을 물어보거나 확인받으세요.
+1. `docs/subtask/current_task.md`를 읽고 계획 내용을 파악합니다.
+2. 계획서에서 다음 정보를 확인합니다:
+   - **Target Task**: 구현할 Sub-task 및 Phase
+   - **목표**: 달성하려는 핵심 목표
+   - **제안하는 구조**: 생성할 파일 목록
+   - **파일별 상세 계획**: 코드 설계 (인터페이스, 클래스, 함수)
+   - **Verification Plan**: 테스트 방법
 
-1. **Target Phase**: 어느 Phase 작업을 진행할까요? (예: Phase 1)
-2. **Sub-task (소분류)**: 어떤 세부 기능을 구현할까요? (예: `login_function`)
-3. **Requirements**: 구체적인 요구사항은 무엇인가요?
-
-**[Action: 로드맵 갱신]**
-사용자가 선택한 Sub-task가 `docs/spec/roadmap.md`의 해당 Phase 아래에 없다면, **지금 즉시 추가**하세요.
-- 포맷: `- [ ] **Sub-task Name**: [설명]`
+> ⚠️ `current_task.md`가 없으면 `@plan-subtask.md`를 먼저 실행하세요.
 
 ---
-## 2단계: 3-Question Orientation (방향 설정)
 
-**"작업을 시작하기 전, 스스로에게 묻고 답하여 컨텍스트를 로드하세요."**
-`docs/spec/roadmap.md`와 `mission.md`를 읽고, 다음 3가지 질문에 대한 답을 먼저 명확히 하세요.
-
-1.  **Where am I?** (현재 진행 중인 Phase와 작업의 위치는?)
-2.  **Where am I going?** (지금 당장 구현해야 할 구체적인 Sub-task는?)
-3.  **What's the goal?** (이 기능을 통해 달성하려는 최종 가치는?)
-
-
-## 3단계: 컨텍스트 분석 (Context Analysis)
+## 2단계: 컨텍스트 확인 (Context Verification)
 
 **"과거의 실수를 반복하지 마세요."**
-구현 전, 다음 문서를 읽고 **제약사항**과 **과거의 교훈**을 머릿속에 로드하세요.
 
-1.  **`docs/spec/tech-stack.md` & `mission.md`**:
-    - 기술 스택 버전과 개발 철학(Granular, Debuggable) 확인.
-2.  **`docs/spec/findings.md` (중요!)**:
-    - **Decisions**: 이전에 결정된 아키텍처나 라이브러리 선택 이유를 확인하세요.
-    - **Troubleshooting**: 혹시 지금 구현하려는 기능과 관련된 과거의 에러 해결 기록이 있나요?
-    - **Discoveries**: 활용 가능한 외부 API 팁이 있는지 확인하세요.
+구현 전, 다음 문서를 읽고 **제약사항**과 **과거의 교훈**을 로드하세요.
+
+1. **`docs/spec/tech-stack.md` & `mission.md`**:
+   - 기술 스택 버전과 개발 철학(Granular, Debuggable) 확인.
+
+2. **`docs/spec/findings.md` (중요!)**:
+   - **Decisions**: 이전에 결정된 아키텍처나 라이브러리 선택 이유
+   - **Troubleshooting**: 관련된 과거 에러 해결 기록
+   - **Discoveries**: 활용 가능한 외부 API 팁
 
 > **Check**: `findings.md`에 기록된 "하지 말아야 할 것"이나 "권장 패턴"이 있다면 반드시 준수하세요.
 
 ---
-## 4단계: 구현 및 테스트 작성 (Implement & Test)
+
+## 3단계: 구현 및 테스트 작성 (Implement & Test)
+
+`current_task.md`의 **파일별 상세 계획**을 따라 구현합니다.
 
 **[Rule 1: 기능 구현 (Granular)]**
-- `src/` 내 적절한 위치에 기능 코드를 작성하세요.
+
+- `src/` 내 계획서에 명시된 경로에 기능 코드를 작성하세요.
 - 함수/클래스는 작게 쪼개고 디버깅이 쉽도록 작성하세요.
 
 **[Rule 2: 테스트 코드 필수 생성]**
+
 - 기능 구현과 동시에 **반드시** 실행 가능한 테스트 코드를 작성해야 합니다.
 - **경로 규칙**: `src/tasktests/[Phase]/[Sub_task].py`
 - **성공 보장**: 작성된 테스트는 실제 실행 시 에러 없이 통과(`Pass`)해야 합니다.
 
 **[Rule 3: 2-Action Rule (중요!)]**
+
 - **"정보는 휘발됩니다. 파일에 고정하세요."**
 - 웹 검색(Search)이나 파일 조회(Read)를 **연속 2회** 수행했다면, 즉시 얻은 지식을 `docs/spec/findings.md`에 요약/기록하세요.
-- *예: 라이브러리 사용법 검색 -> 문서 조회 -> (즉시 findings.md 기록) -> 코드 작성*
 
 ---
 
-## 5단계: 검증 및 완료 (Verify & Complete)
-- pytest로 테스트 실행
-- 성공 시 로드맵 체크박스 `[x]` 업데이트 (`docs/spec/roadmap.md`)
+## 4단계: 검증 및 완료 (Verify & Complete)
 
-## 6단계: 작업 완료 선언
+1. pytest로 테스트 실행
+2. 성공 시 `docs/spec/roadmap.md`의 체크박스 `[x]` 업데이트
+
+---
+
+## 5단계: 작업 완료 선언
 
 구현과 테스트 파일 작성이 완료되면, **검증 담당자(QA)**에게 넘깁니다.
 
 > ✅ **구현 완료. 검증 단계로 넘어갑니다.**
+>
 > - 구현 파일: `src/...`
 > - 테스트 파일: `src/tasktests/...`
+> - 계획서: `docs/subtask/current_task.md`
 >
 > **Next Step**: `@verify-feature.md`를 실행하여 지식을 저장하세요.
-

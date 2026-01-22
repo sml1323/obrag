@@ -23,6 +23,9 @@
 
 - [x] **임베딩 모델 통합**: BGE-M3(로컬) / text-embedding-3-small(클라우드) 선택 가능
 - [ ] **멀티 LLM 지원**: OpenAI, Gemini, Ollama 연동 및 전환 기능
+  - [x] **LLMStrategy Protocol**: LLM 호출을 위한 공통 인터페이스 정의 (`src/core/llm/strategy.py`)
+  - [ ] **LLM Provider 구현체**: OpenAI, Gemini, Ollama 각각의 클라이언트 구현
+  - [ ] **LLMFactory & Config**: Config 기반 LLM 인스턴스 생성 Factory 및 통합 테스트
 - [ ] **RAG 파이프라인**: 벡터 검색 + 컨텍스트 주입 + LLM 응답 생성
 - [ ] **FastAPI 백엔드**: REST API 엔드포인트 구현
 
