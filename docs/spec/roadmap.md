@@ -1,8 +1,8 @@
 # Product Roadmap
 
-> **Last Update**: 2026-01-20 13:06
-> **Current Status**: Phase 2 임베딩 모델 통합 완료 (Factory 패턴 적용). 다음은 멀티 LLM 지원 구현 예정.
-> **Note**: ChromaDB 메타데이터에 리스트 포함 시 JSON 변환 필요 (`findings.md` 참고)
+> **Last Update**: 2026-01-24 21:21
+> **Current Status**: LLMStrategy Protocol 구현 완료. 다음은 LLM Provider 구현체 (Gemini, Ollama) 완성 예정.
+> **Note**: OpenAI API 키 없이는 `OpenAILLM` 인스턴스 생성 불가 (`findings.md` 참고)
 
 > 이 로드맵은 프로젝트의 큰 흐름을 정의합니다. 세부 태스크는 각 단계가 진행됨에 따라 동적으로 생성됩니다.
 
