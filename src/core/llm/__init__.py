@@ -5,6 +5,7 @@ from .strategy import LLMStrategy, LLMResponse, FakeLLM, Message
 from .openai_llm import OpenAILLM
 from .gemini_llm import GeminiLLM
 from .ollama_llm import OllamaLLM
+from .factory import LLMFactory
 
 __all__ = [
     "LLMStrategy",
@@ -14,4 +15,5 @@ __all__ = [
     "OpenAILLM",
     "GeminiLLM",
     "OllamaLLM",
+    "LLMFactory",
 ]

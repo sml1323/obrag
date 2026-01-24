@@ -1,224 +1,314 @@
-# LLM Provider 구현체 구현 계획
+# LLMFactory & Config 구현 계획
 
-> **Target Task**: Phase 2 - 멀티 LLM 지원 > LLM Provider 구현체
-> **Target Path**: `src/core/llm/`
+> **Target Task**: Phase 2 - 멀티 LLM 지원 > LLMFactory & Config
+> **Target Path**: `src/core/llm/factory.py`
 
 ## 목표
 
-Skeleton으로 남아있는 `GeminiLLM`과 `OllamaLLM` 클래스를 실제 API 호출이 가능하도록 완성합니다.
+Config 기반으로 적절한 LLM 인스턴스를 생성하는 Factory 구현.
+기존 `EmbedderFactory` 패턴을 재사용하여 일관성 유지.
 
 ---
 
 ## 기존 패턴 분석
 
-### OpenAILLM 구현체 참고
-
-| 항목                  | 구현 방식                                        |
-| --------------------- | ------------------------------------------------ |
-| **클라이언트 초기화** | `__init__`에서 API 클라이언트 생성               |
-| **API 호출**          | `generate()` 메서드에서 Chat Completion API 호출 |
-| **응답 변환**         | API 응답을 `LLMResponse` dataclass로 래핑        |
-| **파라미터**          | `temperature`, `max_tokens` 지원                 |
+### EmbedderFactory 패턴 ([factory.py](file:///Users/imseungmin/work/portfolio/obsidian_RAG/obrag/src/core/embedding/factory.py))
 
 ```python
-# OpenAILLM.generate() 패턴
-response = self._client.chat.completions.create(
-    model=self._model_name,
-    messages=messages,
-    temperature=temperature,
-    max_tokens=max_tokens,
-)
+class EmbedderFactory:
+    @staticmethod
+    def create(config: EmbeddingConfig) -> EmbeddingStrategy:
+        if config.provider == "openai":
+            return OpenAIEmbedder(...)
+        elif config.provider == "local":
+            return LocalEmbedder(...)
 
-return LLMResponse(
-    content=response.choices[0].message.content,
-    model=response.model,
-    usage={"input_tokens": ..., "output_tokens": ...}
-)
+    @staticmethod
+    def create_fake(dimension: int = 8) -> FakeEmbedder:
+        # 테스트용 편의 메서드
 ```
+
+**핵심 특징:**
+
+- `provider` 필드로 분기
+- 타입 체크로 config 유효성 검증
+- 테스트용 `create_fake()` 제공
+- 편의 메서드 (`create_openai()`)
+
+### 기존 LLM Config ([models.py](file:///Users/imseungmin/work/portfolio/obsidian_RAG/obrag/src/config/models.py#L42-L87))
+
+| Config Class      | Provider   | 주요 필드                |
+| ----------------- | ---------- | ------------------------ |
+| `OpenAILLMConfig` | `"openai"` | `model_name`, `api_key`  |
+| `GeminiLLMConfig` | `"gemini"` | `model_name`, `api_key`  |
+| `OllamaLLMConfig` | `"ollama"` | `model_name`, `base_url` |
 
 ---
 
 ## 제안하는 구조
 
-```
-src/core/llm/
-├── strategy.py      # (기존) Protocol + FakeLLM
-├── openai_llm.py    # (기존) OpenAI 구현체
-├── gemini_llm.py    # ← 수정: google-genai SDK 활용
-└── ollama_llm.py    # ← 수정: OpenAI 호환 API 활용
-```
+### 신규 파일
 
-### 핵심 설계 결정
+| 파일                      | 역할                    |
+| ------------------------- | ----------------------- |
+| `src/core/llm/factory.py` | [NEW] LLMFactory 클래스 |
 
-#### 1. GeminiLLM - `google-genai` SDK 사용
+### 수정 파일
 
-- Google 공식 Python SDK (`google-genai`) 사용
-- 단순 텍스트 생성에는 `client.models.generate_content()` 사용
-- Chat 형식 지원을 위해 messages를 Gemini 포맷으로 변환
-
-#### 2. OllamaLLM - OpenAI 호환 API 사용
-
-- Ollama는 OpenAI API 호환 엔드포인트 제공 (`/v1/chat/completions`)
-- 기존 `openai` 라이브러리를 `base_url`만 변경하여 재사용
-- 추가 의존성 없이 구현 가능
+| 파일                                       | 수정 사항              |
+| ------------------------------------------ | ---------------------- |
+| `src/core/llm/__init__.py`                 | LLMFactory export 추가 |
+| `src/tasktests/phase2/test_llm_factory.py` | [NEW] 통합 테스트      |
 
 ---
 
 ## 파일별 상세 계획
 
-### 1. [MODIFY] [gemini_llm.py](file:///Users/imseungmin/work/portfolio/obsidian_RAG/obrag/src/core/llm/gemini_llm.py)
+### [NEW] `src/core/llm/factory.py`
 
 ```python
-from typing import List, Optional
-from google import genai
-from google.genai import types
-from .strategy import LLMResponse, Message
+"""
+LLM Factory
+
+Config 기반으로 적절한 LLM을 생성하는 Factory 패턴 구현.
+"""
+
+from typing import Union
+
+from .strategy import LLMStrategy, FakeLLM
+from .openai_llm import OpenAILLM
+from .gemini_llm import GeminiLLM
+from .ollama_llm import OllamaLLM
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from config.models import (
+    OpenAILLMConfig,
+    GeminiLLMConfig,
+    OllamaLLMConfig,
+    LLMConfig,
+)
 
 
-class GeminiLLM:
-    """Google Gemini LLM 구현체."""
+class LLMFactory:
+    """
+    Config 기반 LLM 팩토리.
 
-    def __init__(
-        self,
-        model_name: str = "gemini-2.0-flash",
-        api_key: Optional[str] = None,
-    ):
+    사용법:
+        # OpenAI LLM 생성
+        config = OpenAILLMConfig(model_name="gpt-4o-mini")
+        llm = LLMFactory.create(config)
+
+        # Gemini LLM 생성
+        config = GeminiLLMConfig(model_name="gemini-1.5-flash")
+        llm = LLMFactory.create(config)
+
+        # Ollama LLM 생성
+        config = OllamaLLMConfig(model_name="llama3")
+        llm = LLMFactory.create(config)
+
+        # 테스트용 Fake LLM
+        llm = LLMFactory.create_fake(response="Test response")
+    """
+
+    @staticmethod
+    def create(config: LLMConfig) -> LLMStrategy:
         """
+        Config 기반 LLM 생성.
+
         Args:
-            model_name: Gemini 모델 이름
-            api_key: API 키 (None이면 환경변수 GOOGLE_API_KEY 사용)
+            config: OpenAILLMConfig, GeminiLLMConfig, 또는 OllamaLLMConfig
+
+        Returns:
+            LLMStrategy 프로토콜을 구현한 LLM 인스턴스
+
+        Raises:
+            ValueError: 알 수 없는 provider인 경우
         """
-        self._model_name = model_name
-        self._client = genai.Client(api_key=api_key)
+        if config.provider == "openai":
+            if not isinstance(config, OpenAILLMConfig):
+                raise TypeError("OpenAI provider requires OpenAILLMConfig")
+            return OpenAILLM(
+                model_name=config.model_name,
+                api_key=config.api_key,
+            )
 
-    def generate(
-        self,
-        messages: List[Message],
-        *,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-    ) -> LLMResponse:
-        """Gemini API 호출."""
-        # OpenAI 형식 → Gemini 형식 변환
-        contents = self._convert_messages(messages)
-        config = types.GenerateContentConfig(
-            temperature=temperature,
-            max_output_tokens=max_tokens,
-        )
+        elif config.provider == "gemini":
+            if not isinstance(config, GeminiLLMConfig):
+                raise TypeError("Gemini provider requires GeminiLLMConfig")
+            return GeminiLLM(
+                model_name=config.model_name,
+                api_key=config.api_key,
+            )
 
-        response = self._client.models.generate_content(
-            model=self._model_name,
-            contents=contents,
-            config=config,
-        )
+        elif config.provider == "ollama":
+            if not isinstance(config, OllamaLLMConfig):
+                raise TypeError("Ollama provider requires OllamaLLMConfig")
+            return OllamaLLM(
+                model_name=config.model_name,
+                base_url=config.base_url,
+            )
 
-        return LLMResponse(
-            content=response.text or "",
-            model=self._model_name,
-            usage={
-                "input_tokens": response.usage_metadata.prompt_token_count if response.usage_metadata else 0,
-                "output_tokens": response.usage_metadata.candidates_token_count if response.usage_metadata else 0,
-            }
-        )
+        else:
+            raise ValueError(
+                f"Unknown provider: {config.provider}. "
+                "Supported providers: 'openai', 'gemini', 'ollama'"
+            )
 
-    def _convert_messages(self, messages: List[Message]) -> list:
-        """OpenAI 형식 메시지를 Gemini 형식으로 변환."""
-        contents = []
-        system_instruction = None
+    @staticmethod
+    def create_fake(response: str = "This is a fake response.") -> FakeLLM:
+        """
+        테스트용 Fake LLM 생성.
 
-        for msg in messages:
-            role = msg["role"]
-            content = msg["content"]
+        Args:
+            response: 반환할 고정 응답 문자열
 
-            if role == "system":
-                system_instruction = content
-            elif role == "user":
-                contents.append(types.Content(
-                    role="user",
-                    parts=[types.Part(text=content)]
-                ))
-            elif role == "assistant":
-                contents.append(types.Content(
-                    role="model",
-                    parts=[types.Part(text=content)]
-                ))
-
-        return contents
-
-    @property
-    def model_name(self) -> str:
-        return self._model_name
+        Returns:
+            FakeLLM 인스턴스
+        """
+        return FakeLLM(response=response)
 ```
 
 ---
 
-### 2. [MODIFY] [ollama_llm.py](file:///Users/imseungmin/work/portfolio/obsidian_RAG/obrag/src/core/llm/ollama_llm.py)
+### [MODIFY] `src/core/llm/__init__.py`
 
-```python
-from typing import List, Optional
-from openai import OpenAI
-from .strategy import LLMResponse, Message
+```diff
+ from .strategy import LLMStrategy, LLMResponse, FakeLLM, Message
+ from .openai_llm import OpenAILLM
+ from .gemini_llm import GeminiLLM
+ from .ollama_llm import OllamaLLM
++from .factory import LLMFactory
 
-
-class OllamaLLM:
-    """로컬 Ollama 서버용 LLM 구현체."""
-
-    def __init__(
-        self,
-        model_name: str = "llama3.2",
-        base_url: str = "http://localhost:11434/v1",
-    ):
-        """
-        Args:
-            model_name: Ollama 모델 이름
-            base_url: Ollama 서버 URL (OpenAI 호환 엔드포인트)
-        """
-        self._model_name = model_name
-        self._client = OpenAI(
-            base_url=base_url,
-            api_key="ollama",  # 필수이지만 무시됨
-        )
-
-    def generate(
-        self,
-        messages: List[Message],
-        *,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-    ) -> LLMResponse:
-        """Ollama API 호출 (OpenAI 호환)."""
-        response = self._client.chat.completions.create(
-            model=self._model_name,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-
-        return LLMResponse(
-            content=response.choices[0].message.content or "",
-            model=response.model,
-            usage={
-                "input_tokens": response.usage.prompt_tokens if response.usage else 0,
-                "output_tokens": response.usage.completion_tokens if response.usage else 0,
-            }
-        )
-
-    @property
-    def model_name(self) -> str:
-        return self._model_name
+ __all__ = [
+     "LLMStrategy",
+     "LLMResponse",
+     "FakeLLM",
+     "Message",
+     "OpenAILLM",
+     "GeminiLLM",
+     "OllamaLLM",
++    "LLMFactory",
+ ]
 ```
 
 ---
 
-### 3. 의존성 추가
+### [NEW] `src/tasktests/phase2/test_llm_factory.py`
 
-`pyproject.toml` 또는 `requirements.txt`에 추가 필요:
+```python
+"""
+LLMFactory 통합 테스트
 
+각 Provider별 LLM 생성 및 FakeLLM 테스트.
+실제 API 호출이 필요한 테스트는 환경변수 없으면 skip.
+"""
+
+import os
+import pytest
+
+from core.llm import LLMFactory, LLMStrategy, FakeLLM
+from config.models import (
+    OpenAILLMConfig,
+    GeminiLLMConfig,
+    OllamaLLMConfig,
+)
+
+
+class TestLLMFactoryFake:
+    """FakeLLM 테스트 (외부 의존성 없음)"""
+
+    def test_create_fake_default_response(self):
+        """기본 응답으로 FakeLLM 생성"""
+        llm = LLMFactory.create_fake()
+        assert isinstance(llm, FakeLLM)
+
+        response = llm.generate([{"role": "user", "content": "Hello"}])
+        assert response.content == "This is a fake response."
+
+    def test_create_fake_custom_response(self):
+        """커스텀 응답으로 FakeLLM 생성"""
+        llm = LLMFactory.create_fake(response="Custom answer")
+        response = llm.generate([{"role": "user", "content": "Test"}])
+        assert response.content == "Custom answer"
+
+
+class TestLLMFactoryOpenAI:
+    """OpenAI LLM Factory 테스트"""
+
+    @pytest.fixture
+    def api_key(self):
+        key = os.getenv("OPENAI_API_KEY")
+        if not key:
+            pytest.skip("OPENAI_API_KEY not set")
+        return key
+
+    def test_create_openai_from_config(self, api_key):
+        """Config로 OpenAI LLM 생성"""
+        config = OpenAILLMConfig(model_name="gpt-4o-mini", api_key=api_key)
+        llm = LLMFactory.create(config)
+
+        assert llm.model_name == "gpt-4o-mini"
+
+    def test_openai_generate(self, api_key):
+        """OpenAI 실제 API 호출 테스트"""
+        config = OpenAILLMConfig(model_name="gpt-4o-mini", api_key=api_key)
+        llm = LLMFactory.create(config)
+
+        response = llm.generate([
+            {"role": "user", "content": "Say 'hello' only."}
+        ], temperature=0.0, max_tokens=10)
+
+        assert "hello" in response.content.lower()
+
+
+class TestLLMFactoryGemini:
+    """Gemini LLM Factory 테스트"""
+
+    @pytest.fixture
+    def api_key(self):
+        key = os.getenv("GOOGLE_API_KEY")
+        if not key:
+            pytest.skip("GOOGLE_API_KEY not set")
+        return key
+
+    def test_create_gemini_from_config(self, api_key):
+        """Config로 Gemini LLM 생성"""
+        config = GeminiLLMConfig(model_name="gemini-1.5-flash", api_key=api_key)
+        llm = LLMFactory.create(config)
+
+        assert llm.model_name == "gemini-1.5-flash"
+
+
+class TestLLMFactoryOllama:
+    """Ollama LLM Factory 테스트 (로컬 서버 필요)"""
+
+    def test_create_ollama_from_config(self):
+        """Config로 Ollama LLM 생성 (인스턴스 생성만)"""
+        config = OllamaLLMConfig(model_name="llama3")
+        llm = LLMFactory.create(config)
+
+        assert llm.model_name == "llama3"
+        assert llm.base_url == "http://localhost:11434"
+
+
+class TestLLMFactoryErrors:
+    """Factory 에러 케이스 테스트"""
+
+    def test_invalid_provider_raises_error(self):
+        """잘못된 provider 에러"""
+        # 직접 config를 조작하여 테스트
+        config = OpenAILLMConfig()
+        config.provider = "invalid"  # type: ignore
+
+        with pytest.raises(ValueError, match="Unknown provider"):
+            LLMFactory.create(config)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
 ```
-google-genai>=1.0.0
-```
-
-> **Note**: `ollama` 구현은 기존 `openai` 패키지를 재사용하므로 추가 의존성 없음
 
 ---
 
@@ -226,30 +316,53 @@ google-genai>=1.0.0
 
 ### Automated Tests
 
-1. **단위 테스트** (`tests/core/llm/`)
-   - `test_gemini_llm.py`: API 키 없을 시 skip, 기본 generate 호출 테스트
-   - `test_ollama_llm.py`: 서버 연결 불가 시 skip, 기본 generate 호출 테스트
-
-2. **Mock 테스트**
-   - API 호출부 mocking으로 응답 형식 검증
-
 ```bash
-pytest tests/core/llm/ -v
+# 전체 테스트 실행 (API 키 없으면 일부 skip)
+cd /Users/imseungmin/work/portfolio/obsidian_RAG/obrag
+python -m pytest src/tasktests/phase2/test_llm_factory.py -v
+
+# FakeLLM만 테스트 (외부 의존성 없음)
+python -m pytest src/tasktests/phase2/test_llm_factory.py::TestLLMFactoryFake -v
 ```
 
 ### Manual Verification
 
-1. **Gemini 테스트**: `GOOGLE_API_KEY` 환경변수 설정 후 실행
-2. **Ollama 테스트**: 로컬에서 `ollama serve` 실행 후 테스트
+1. **OpenAI API 호출 확인** (OPENAI_API_KEY 설정 시):
+
+   ```bash
+   OPENAI_API_KEY=sk-... python -m pytest src/tasktests/phase2/test_llm_factory.py::TestLLMFactoryOpenAI -v
+   ```
+
+2. **Gemini API 호출 확인** (GOOGLE_API_KEY 설정 시):
+
+   ```bash
+   GOOGLE_API_KEY=... python -m pytest src/tasktests/phase2/test_llm_factory.py::TestLLMFactoryGemini -v
+   ```
+
+3. **Ollama 연동 확인** (로컬 서버 실행 시):
+
+   ```bash
+   # Ollama 서버 시작 후
+   python -c "
+   from core.llm import LLMFactory
+   from config.models import OllamaLLMConfig
+
+   config = OllamaLLMConfig(model_name='llama3')
+   llm = LLMFactory.create(config)
+   response = llm.generate([{'role': 'user', 'content': 'Hello'}])
+   print(response.content)
+   "
+   ```
 
 ---
 
 ## 요약
 
-| 항목             | 내용                                                            |
-| ---------------- | --------------------------------------------------------------- |
-| **수정 파일 수** | 2개 (`gemini_llm.py`, `ollama_llm.py`)                          |
-| **추가 의존성**  | `google-genai`                                                  |
-| **테스트 파일**  | `test_gemini_llm.py`, `test_ollama_llm.py` (신규 또는 업데이트) |
-| **주요 패턴**    | OpenAI 구현체 패턴 재사용                                       |
-| **특이사항**     | Ollama는 OpenAI 호환 API 활용 (추가 라이브러리 불필요)          |
+| 항목            | 내용                                       |
+| --------------- | ------------------------------------------ |
+| **신규 파일**   | `src/core/llm/factory.py`                  |
+| **수정 파일**   | `src/core/llm/__init__.py`                 |
+| **테스트 파일** | `src/tasktests/phase2/test_llm_factory.py` |
+| **참고 패턴**   | `EmbedderFactory` (동일 구조)              |
+| **외부 의존성** | 없음 (기존 LLM 구현체 재사용)              |
+| **예상 소요**   | 1-2시간                                    |

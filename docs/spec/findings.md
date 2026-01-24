@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-01-25: LLMFactory & Config 구현
+
+### Decisions (기술적 의사결정)
+
+#### 1. EmbedderFactory 패턴 재사용
+
+- **결정**: `EmbedderFactory`와 동일한 구조로 `LLMFactory` 설계
+- **이유**:
+  - 프로젝트 일관성 유지
+  - 테스트 시 `FakeLLM`으로 쉽게 교체 가능
+  - DI(의존성 주입) 원칙 준수
+- **사용법**:
+
+  ```python
+  from core.llm import LLMFactory
+  from config.models import OpenAILLMConfig, GeminiLLMConfig, OllamaLLMConfig
+
+  # Provider별 LLM 생성
+  config = OpenAILLMConfig(model_name="gpt-4o-mini")
+  llm = LLMFactory.create(config)
+
+  # 테스트용
+  llm = LLMFactory.create_fake(response="Test")
+  ```
+
+---
+
 ## 2026-01-20: 임베딩 모델 통합 (Embedding Model Integration)
 
 ### Decisions (기술적 의사결정)
