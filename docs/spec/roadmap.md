@@ -1,7 +1,7 @@
 # Product Roadmap
 
-> **Last Update**: 2026-01-24 21:21
-> **Current Status**: LLMStrategy Protocol 구현 완료. 다음은 LLM Provider 구현체 (Gemini, Ollama) 완성 예정.
+> **Last Update**: 2026-01-24 23:45
+> **Current Status**: LLM Provider 구현체 완료 (Gemini, Ollama). 다음은 LLMFactory & Config 구현 예정.
 > **Note**: OpenAI API 키 없이는 `OpenAILLM` 인스턴스 생성 불가 (`findings.md` 참고)
 
 > 이 로드맵은 프로젝트의 큰 흐름을 정의합니다. 세부 태스크는 각 단계가 진행됨에 따라 동적으로 생성됩니다.
@@ -24,7 +24,7 @@
 - [x] **임베딩 모델 통합**: BGE-M3(로컬) / text-embedding-3-small(클라우드) 선택 가능
 - [ ] **멀티 LLM 지원**: OpenAI, Gemini, Ollama 연동 및 전환 기능
   - [x] **LLMStrategy Protocol**: LLM 호출을 위한 공통 인터페이스 정의 (`src/core/llm/strategy.py`)
-  - [ ] **LLM Provider 구현체**: OpenAI, Gemini, Ollama 각각의 클라이언트 구현
+  - [x] **LLM Provider 구현체**: OpenAI, Gemini, Ollama 각각의 클라이언트 구현
   - [ ] **LLMFactory & Config**: Config 기반 LLM 인스턴스 생성 Factory 및 통합 테스트
 - [ ] **RAG 파이프라인**: 벡터 검색 + 컨텍스트 주입 + LLM 응답 생성
 - [ ] **FastAPI 백엔드**: REST API 엔드포인트 구현

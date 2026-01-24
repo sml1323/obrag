@@ -1,32 +1,40 @@
-# LLMStrategy Protocol 구현 계획
+# LLM Provider 구현체 구현 계획
 
-> **Target Task**: Phase 2 - 멀티 LLM 지원 > LLMStrategy Protocol
+> **Target Task**: Phase 2 - 멀티 LLM 지원 > LLM Provider 구현체
 > **Target Path**: `src/core/llm/`
 
 ## 목표
 
-LLM 호출을 위한 **공통 인터페이스(Protocol)**를 정의하여, 다양한 LLM 프로바이더(OpenAI, Gemini, Ollama)를 일관된 방식으로 사용할 수 있게 합니다. 기존 `EmbeddingStrategy` 패턴을 참고하여 DI 원칙과 테스트 용이성을 확보합니다.
+Skeleton으로 남아있는 `GeminiLLM`과 `OllamaLLM` 클래스를 실제 API 호출이 가능하도록 완성합니다.
 
 ---
 
 ## 기존 패턴 분석
 
-`src/core/embedding/` 구조를 참고합니다:
+### OpenAILLM 구현체 참고
 
-| 파일                 | 역할                                    |
-| -------------------- | --------------------------------------- |
-| `strategy.py`        | Protocol 정의 + FakeEmbedder (테스트용) |
-| `openai_embedder.py` | OpenAI 구현체                           |
-| `local_embedder.py`  | 로컬 모델 구현체 (Skeleton)             |
-| `factory.py`         | Config 기반 인스턴스 생성               |
-| `__init__.py`        | 깔끔한 모듈 export                      |
+| 항목                  | 구현 방식                                        |
+| --------------------- | ------------------------------------------------ |
+| **클라이언트 초기화** | `__init__`에서 API 클라이언트 생성               |
+| **API 호출**          | `generate()` 메서드에서 Chat Completion API 호출 |
+| **응답 변환**         | API 응답을 `LLMResponse` dataclass로 래핑        |
+| **파라미터**          | `temperature`, `max_tokens` 지원                 |
 
-### 핵심 특징
+```python
+# OpenAILLM.generate() 패턴
+response = self._client.chat.completions.create(
+    model=self._model_name,
+    messages=messages,
+    temperature=temperature,
+    max_tokens=max_tokens,
+)
 
-- **Protocol 패턴**: `typing.Protocol`을 사용한 덕 타이핑
-- **Type Alias**: `Vector = List[float]` 등 명확한 타입 힌트
-- **FakeEmbedder**: API 호출 없이 빠른 단위 테스트
-- **Config Dataclass**: `src/config/models.py`에서 설정 검증
+return LLMResponse(
+    content=response.choices[0].message.content,
+    model=response.model,
+    usage={"input_tokens": ..., "output_tokens": ...}
+)
+```
 
 ---
 
@@ -34,42 +42,54 @@ LLM 호출을 위한 **공통 인터페이스(Protocol)**를 정의하여, 다�
 
 ```
 src/core/llm/
-├── __init__.py           # 모듈 export
-├── strategy.py           # LLMStrategy Protocol + FakeLLM
-├── openai_llm.py         # OpenAI 구현체 (Phase 2 우선 구현)
-├── gemini_llm.py         # Gemini 구현체 (Skeleton)
-└── ollama_llm.py         # Ollama 구현체 (Skeleton)
+├── strategy.py      # (기존) Protocol + FakeLLM
+├── openai_llm.py    # (기존) OpenAI 구현체
+├── gemini_llm.py    # ← 수정: google-genai SDK 활용
+└── ollama_llm.py    # ← 수정: OpenAI 호환 API 활용
 ```
 
-```
-src/config/models.py      # LLM Config 추가
-```
+### 핵심 설계 결정
+
+#### 1. GeminiLLM - `google-genai` SDK 사용
+
+- Google 공식 Python SDK (`google-genai`) 사용
+- 단순 텍스트 생성에는 `client.models.generate_content()` 사용
+- Chat 형식 지원을 위해 messages를 Gemini 포맷으로 변환
+
+#### 2. OllamaLLM - OpenAI 호환 API 사용
+
+- Ollama는 OpenAI API 호환 엔드포인트 제공 (`/v1/chat/completions`)
+- 기존 `openai` 라이브러리를 `base_url`만 변경하여 재사용
+- 추가 의존성 없이 구현 가능
 
 ---
 
 ## 파일별 상세 계획
 
-### 1. `src/core/llm/strategy.py`
-
-LLM 호출을 위한 Protocol과 테스트용 FakeLLM을 정의합니다.
+### 1. [MODIFY] [gemini_llm.py](file:///Users/imseungmin/work/portfolio/obsidian_RAG/obrag/src/core/llm/gemini_llm.py)
 
 ```python
-from typing import Protocol, List, Optional
-from dataclasses import dataclass
-
-# Type Aliases
-Message = dict  # {"role": "user"|"assistant"|"system", "content": str}
-
-@dataclass
-class LLMResponse:
-    """LLM 응답 데이터"""
-    content: str
-    model: str
-    usage: dict  # {"input_tokens": int, "output_tokens": int}
+from typing import List, Optional
+from google import genai
+from google.genai import types
+from .strategy import LLMResponse, Message
 
 
-class LLMStrategy(Protocol):
-    """LLM 전략 Protocol"""
+class GeminiLLM:
+    """Google Gemini LLM 구현체."""
+
+    def __init__(
+        self,
+        model_name: str = "gemini-2.0-flash",
+        api_key: Optional[str] = None,
+    ):
+        """
+        Args:
+            model_name: Gemini 모델 이름
+            api_key: API 키 (None이면 환경변수 GOOGLE_API_KEY 사용)
+        """
+        self._model_name = model_name
+        self._client = genai.Client(api_key=api_key)
 
     def generate(
         self,
@@ -78,34 +98,52 @@ class LLMStrategy(Protocol):
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
     ) -> LLMResponse:
-        """메시지 기반 응답 생성"""
-        ...
-
-    @property
-    def model_name(self) -> str:
-        """사용 중인 모델 이름"""
-        ...
-
-
-class FakeLLM:
-    """테스트용 가짜 LLM"""
-
-    def __init__(self, response: str = "This is a fake response."):
-        self._response = response
-        self._model_name = "fake-llm"
-
-    def generate(
-        self,
-        messages: List[Message],
-        *,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-    ) -> LLMResponse:
-        return LLMResponse(
-            content=self._response,
-            model=self._model_name,
-            usage={"input_tokens": 10, "output_tokens": 5}
+        """Gemini API 호출."""
+        # OpenAI 형식 → Gemini 형식 변환
+        contents = self._convert_messages(messages)
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
         )
+
+        response = self._client.models.generate_content(
+            model=self._model_name,
+            contents=contents,
+            config=config,
+        )
+
+        return LLMResponse(
+            content=response.text or "",
+            model=self._model_name,
+            usage={
+                "input_tokens": response.usage_metadata.prompt_token_count if response.usage_metadata else 0,
+                "output_tokens": response.usage_metadata.candidates_token_count if response.usage_metadata else 0,
+            }
+        )
+
+    def _convert_messages(self, messages: List[Message]) -> list:
+        """OpenAI 형식 메시지를 Gemini 형식으로 변환."""
+        contents = []
+        system_instruction = None
+
+        for msg in messages:
+            role = msg["role"]
+            content = msg["content"]
+
+            if role == "system":
+                system_instruction = content
+            elif role == "user":
+                contents.append(types.Content(
+                    role="user",
+                    parts=[types.Part(text=content)]
+                ))
+            elif role == "assistant":
+                contents.append(types.Content(
+                    role="model",
+                    parts=[types.Part(text=content)]
+                ))
+
+        return contents
 
     @property
     def model_name(self) -> str:
@@ -114,25 +152,32 @@ class FakeLLM:
 
 ---
 
-### 2. `src/core/llm/openai_llm.py`
-
-OpenAI Chat Completion API 구현체입니다.
+### 2. [MODIFY] [ollama_llm.py](file:///Users/imseungmin/work/portfolio/obsidian_RAG/obrag/src/core/llm/ollama_llm.py)
 
 ```python
 from typing import List, Optional
 from openai import OpenAI
-from .strategy import LLMStrategy, LLMResponse, Message
+from .strategy import LLMResponse, Message
 
-class OpenAILLM:
-    """OpenAI LLM 구현체"""
+
+class OllamaLLM:
+    """로컬 Ollama 서버용 LLM 구현체."""
 
     def __init__(
         self,
-        model_name: str = "gpt-4o-mini",
-        api_key: Optional[str] = None,
+        model_name: str = "llama3.2",
+        base_url: str = "http://localhost:11434/v1",
     ):
+        """
+        Args:
+            model_name: Ollama 모델 이름
+            base_url: Ollama 서버 URL (OpenAI 호환 엔드포인트)
+        """
         self._model_name = model_name
-        self._client = OpenAI(api_key=api_key)
+        self._client = OpenAI(
+            base_url=base_url,
+            api_key="ollama",  # 필수이지만 무시됨
+        )
 
     def generate(
         self,
@@ -141,18 +186,20 @@ class OpenAILLM:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
     ) -> LLMResponse:
+        """Ollama API 호출 (OpenAI 호환)."""
         response = self._client.chat.completions.create(
             model=self._model_name,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
         )
+
         return LLMResponse(
-            content=response.choices[0].message.content,
+            content=response.choices[0].message.content or "",
             model=response.model,
             usage={
-                "input_tokens": response.usage.prompt_tokens,
-                "output_tokens": response.usage.completion_tokens,
+                "input_tokens": response.usage.prompt_tokens if response.usage else 0,
+                "output_tokens": response.usage.completion_tokens if response.usage else 0,
             }
         )
 
@@ -163,91 +210,15 @@ class OpenAILLM:
 
 ---
 
-### 3. `src/core/llm/gemini_llm.py` (Skeleton)
+### 3. 의존성 추가
 
-```python
-from typing import List, Optional
-from .strategy import LLMResponse, Message
+`pyproject.toml` 또는 `requirements.txt`에 추가 필요:
 
-class GeminiLLM:
-    """Gemini LLM 구현체 (추후 구현)"""
-
-    def __init__(self, model_name: str = "gemini-1.5-flash"):
-        self._model_name = model_name
-
-    def generate(
-        self,
-        messages: List[Message],
-        *,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-    ) -> LLMResponse:
-        raise NotImplementedError("GeminiLLM is not implemented yet")
-
-    @property
-    def model_name(self) -> str:
-        return self._model_name
+```
+google-genai>=1.0.0
 ```
 
----
-
-### 4. `src/core/llm/ollama_llm.py` (Skeleton)
-
-```python
-from typing import List, Optional
-from .strategy import LLMResponse, Message
-
-class OllamaLLM:
-    """Ollama LLM 구현체 (추후 구현)"""
-
-    def __init__(self, model_name: str = "llama3"):
-        self._model_name = model_name
-
-    def generate(
-        self,
-        messages: List[Message],
-        *,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-    ) -> LLMResponse:
-        raise NotImplementedError("OllamaLLM is not implemented yet")
-
-    @property
-    def model_name(self) -> str:
-        return self._model_name
-```
-
----
-
-### 5. `src/config/models.py` 추가
-
-```python
-# LLM Config Types
-LLMProvider = Literal["openai", "gemini", "ollama"]
-OpenAILLMModel = Literal["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"]
-GeminiLLMModel = Literal["gemini-1.5-pro", "gemini-1.5-flash"]
-
-@dataclass
-class OpenAILLMConfig:
-    provider: LLMProvider = "openai"
-    model_name: OpenAILLMModel = "gpt-4o-mini"
-    api_key: str | None = None
-
-    def __post_init__(self):
-        # validation...
-
-@dataclass
-class GeminiLLMConfig:
-    provider: LLMProvider = "gemini"
-    model_name: GeminiLLMModel = "gemini-1.5-flash"
-    api_key: str | None = None
-
-@dataclass
-class OllamaLLMConfig:
-    provider: LLMProvider = "ollama"
-    model_name: str = "llama3"
-    base_url: str = "http://localhost:11434"
-```
+> **Note**: `ollama` 구현은 기존 `openai` 패키지를 재사용하므로 추가 의존성 없음
 
 ---
 
@@ -255,46 +226,30 @@ class OllamaLLMConfig:
 
 ### Automated Tests
 
-1. **단위 테스트 작성**: `src/test/llm/test_strategy.py`
+1. **단위 테스트** (`tests/core/llm/`)
+   - `test_gemini_llm.py`: API 키 없을 시 skip, 기본 generate 호출 테스트
+   - `test_ollama_llm.py`: 서버 연결 불가 시 skip, 기본 generate 호출 테스트
+
+2. **Mock 테스트**
+   - API 호출부 mocking으로 응답 형식 검증
 
 ```bash
-# 테스트 실행 명령어
-cd /Users/imseungmin/work/portfolio/obsidian_RAG/obrag
-python -m pytest src/test/llm/test_strategy.py -v
-```
-
-테스트 항목:
-
-- `FakeLLM.generate()` 정상 동작
-- `LLMResponse` 데이터 구조 검증
-- OpenAI Config 유효성 검증
-
-2. **실제 API 호출 테스트** (선택적):
-
-```bash
-# OpenAI API 연동 테스트 (API 키 필요)
-python -m pytest src/test/llm/test_openai_llm.py -v -k "integration"
+pytest tests/core/llm/ -v
 ```
 
 ### Manual Verification
 
-사용자에게 다음 확인을 요청할 수 있습니다:
-
-- OpenAI API 키가 `.env`에 설정되어 있는지 확인
-- 실제 API 호출 테스트 결과 확인
+1. **Gemini 테스트**: `GOOGLE_API_KEY` 환경변수 설정 후 실행
+2. **Ollama 테스트**: 로컬에서 `ollama serve` 실행 후 테스트
 
 ---
 
 ## 요약
 
-| 항목            | 내용                                                                                  |
-| --------------- | ------------------------------------------------------------------------------------- |
-| **신규 파일**   | 5개 (`strategy.py`, `openai_llm.py`, `gemini_llm.py`, `ollama_llm.py`, `__init__.py`) |
-| **수정 파일**   | 1개 (`src/config/models.py`)                                                          |
-| **테스트 파일** | 2개 (`test_strategy.py`, `test_openai_llm.py`)                                        |
-| **외부 의존성** | `openai` (이미 설치됨), `google-generativeai` (Gemini용, 추후), `ollama` (추후)       |
-| **참고 패턴**   | `src/core/embedding/` 구조 동일 적용                                                  |
-
-> [!IMPORTANT]
-> 이 Sub-task에서는 **LLMStrategy Protocol**과 **OpenAI 구현체**만 완전 구현합니다.
-> Gemini, Ollama는 Skeleton만 생성하고, 다음 Sub-task "LLM Provider 구현체"에서 완성합니다.
+| 항목             | 내용                                                            |
+| ---------------- | --------------------------------------------------------------- |
+| **수정 파일 수** | 2개 (`gemini_llm.py`, `ollama_llm.py`)                          |
+| **추가 의존성**  | `google-genai`                                                  |
+| **테스트 파일**  | `test_gemini_llm.py`, `test_ollama_llm.py` (신규 또는 업데이트) |
+| **주요 패턴**    | OpenAI 구현체 패턴 재사용                                       |
+| **특이사항**     | Ollama는 OpenAI 호환 API 활용 (추가 라이브러리 불필요)          |

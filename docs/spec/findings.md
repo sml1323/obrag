@@ -160,3 +160,57 @@
 - `response.usage.prompt_tokens` → 입력 토큰 수
 - `response.usage.completion_tokens` → 출력 토큰 수
 - `response.model` → 실제 사용된 모델명 (요청과 다를 수 있음)
+
+---
+
+## 2026-01-24: LLM Provider 구현체 (Gemini, Ollama)
+
+### Decisions (기술적 의사결정)
+
+#### 1. GeminiLLM: `google-genai` SDK 사용
+
+- **결정**: Google 공식 Python SDK (`google-genai`) 사용
+- **이유**:
+  - 공식 SDK로 안정성 및 장기 지원 보장
+  - Chat API 및 `generate_content()` 모두 지원
+  - system instruction 별도 파라미터로 지원됨
+- **참고**: 환경변수 `GOOGLE_API_KEY` 자동 인식
+
+#### 2. OllamaLLM: OpenAI 호환 API 활용
+
+- **결정**: Ollama의 OpenAI 호환 엔드포인트 (`/v1/chat/completions`) 사용
+- **이유**:
+  - 추가 의존성 없이 기존 `openai` 라이브러리 재사용
+  - OpenAI SDK의 `base_url` 파라미터만 변경하면 동작
+  - API 형식이 동일하여 코드 일관성 유지
+- **주의**: `api_key`는 필수 파라미터지만 Ollama에서 무시됨 ("ollama" 사용)
+
+---
+
+### Discoveries (외부 지식)
+
+#### Gemini API 메시지 형식 변환
+
+- OpenAI 형식 `role: "assistant"` → Gemini 형식 `role: "model"`
+- system 메시지는 별도 `system_instruction` 파라미터로 전달
+- `types.Content`, `types.Part` 객체로 메시지 구성
+
+```python
+# OpenAI → Gemini 변환 예시
+contents.append(types.Content(
+    role="model",  # "assistant" 대신
+    parts=[types.Part(text=content)]
+))
+```
+
+#### Gemini API 응답 구조
+
+- `response.text` → 텍스트 응답
+- `response.usage_metadata.prompt_token_count` → 입력 토큰 수
+- `response.usage_metadata.candidates_token_count` → 출력 토큰 수
+
+#### Ollama OpenAI 호환 엔드포인트
+
+- 기본 URL: `http://localhost:11434/v1`
+- OpenAI SDK와 완전 호환 (temperature, max_tokens 등 지원)
+- usage 정보도 동일한 형식으로 반환됨
