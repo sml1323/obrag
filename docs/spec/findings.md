@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-01-25: Retriever Module 구현
+
+### Decisions (기술적 의사결정)
+
+#### 1. ChromaStore Wrapping 전략
+
+- **결정**: `Retriever`는 `ChromaStore.query()`를 단순 래핑하고, 결과를 `RetrievedChunk` 데이터클래스로 변환
+- **이유**:
+  - `ChromaStore`가 이미 임베딩 → 검색을 내부 처리하므로 중복 구현 불필요
+  - 명확한 책임 분리: `ChromaStore` = DB 계층, `Retriever` = RAG 계층
+  - 향후 검색 전략 변경 시 `Retriever`만 수정하면 됨
+- **사용법**:
+
+  ```python
+  from core.rag import Retriever
+  from db.chroma_store import ChromaStore
+
+  store = ChromaStore()
+  retriever = Retriever(store)
+  result = retriever.retrieve("query", top_k=5)
+  ```
+
+#### 2. L2 거리 → 유사도 점수 변환 공식
+
+- **결정**: `score = 1 / (1 + distance)` 공식 사용
+- **이유**:
+  - 0~1 범위로 정규화되어 직관적
+  - distance=0 → score=1.0 (완전 일치)
+  - distance→∞ → score→0 (무관련)
+- **주의**: ChromaDB 기본 메트릭은 L2 (유클리드 거리)
+
+---
+
 ## 2026-01-25: LLMFactory & Config 구현
 
 ### Decisions (기술적 의사결정)

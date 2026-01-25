@@ -1,47 +1,38 @@
-# LLMFactory & Config 구현 계획
+# Retriever Module 구현 계획
 
-> **Target Task**: Phase 2 - 멀티 LLM 지원 > LLMFactory & Config
-> **Target Path**: `src/core/llm/factory.py`
+> **Target Task**: Phase 2 - RAG 파이프라인 > Retriever Module
+> **Target Path**: `src/core/rag/retriever.py`
 
 ## 목표
 
-Config 기반으로 적절한 LLM 인스턴스를 생성하는 Factory 구현.
-기존 `EmbedderFactory` 패턴을 재사용하여 일관성 유지.
+사용자 쿼리를 임베딩하고 ChromaDB에서 Top-k 유사 청크를 검색하는 Retriever 모듈 구현.
+기존 `EmbedderFactory` + `ChromaStore` 패턴을 활용하여 DI 원칙을 준수하고 테스트 용이성을 확보합니다.
 
 ---
 
 ## 기존 패턴 분석
 
-### EmbedderFactory 패턴 ([factory.py](file:///Users/imseungmin/work/portfolio/obsidian_RAG/obrag/src/core/embedding/factory.py))
+### ChromaStore.query() ([chroma_store.py](file:///Users/imseungmin/work/portfolio/obsidian_RAG/obrag/src/db/chroma_store.py#L138-L180))
 
 ```python
-class EmbedderFactory:
-    @staticmethod
-    def create(config: EmbeddingConfig) -> EmbeddingStrategy:
-        if config.provider == "openai":
-            return OpenAIEmbedder(...)
-        elif config.provider == "local":
-            return LocalEmbedder(...)
-
-    @staticmethod
-    def create_fake(dimension: int = 8) -> FakeEmbedder:
-        # 테스트용 편의 메서드
+def query(
+    self, query_text: str, n_results: int = 5,
+    where: Optional[dict] = None, where_document: Optional[dict] = None,
+) -> List[dict]:
+    """Returns: [{"id": ..., "text": ..., "metadata": ..., "distance": ...}]"""
 ```
 
 **핵심 특징:**
 
-- `provider` 필드로 분기
-- 타입 체크로 config 유효성 검증
-- 테스트용 `create_fake()` 제공
-- 편의 메서드 (`create_openai()`)
+- 이미 텍스트 쿼리 → 임베딩 → 검색이 내부적으로 처리됨
+- `distance` (L2 거리) 반환 → similarity score로 변환 필요 시 `1 / (1 + distance)` 사용
+- 메타데이터 필터(`where`) 및 문서 필터(`where_document`) 지원
 
-### 기존 LLM Config ([models.py](file:///Users/imseungmin/work/portfolio/obsidian_RAG/obrag/src/config/models.py#L42-L87))
+### EmbedderFactory 패턴 ([factory.py](file:///Users/imseungmin/work/portfolio/obsidian_RAG/obrag/src/core/embedding/factory.py))
 
-| Config Class      | Provider   | 주요 필드                |
-| ----------------- | ---------- | ------------------------ |
-| `OpenAILLMConfig` | `"openai"` | `model_name`, `api_key`  |
-| `GeminiLLMConfig` | `"gemini"` | `model_name`, `api_key`  |
-| `OllamaLLMConfig` | `"ollama"` | `model_name`, `base_url` |
+- Config 기반 임베더 생성
+- DI로 테스트 시 `FakeEmbedder` 주입 가능
+- Retriever에서는 `ChromaStore`가 이미 임베더를 사용하므로 별도 임베더 주입 불필요
 
 ---
 
@@ -49,261 +40,376 @@ class EmbedderFactory:
 
 ### 신규 파일
 
-| 파일                      | 역할                    |
-| ------------------------- | ----------------------- |
-| `src/core/llm/factory.py` | [NEW] LLMFactory 클래스 |
+| 파일                        | 역할                                        |
+| --------------------------- | ------------------------------------------- |
+| `src/core/rag/__init__.py`  | [NEW] RAG 모듈 초기화                       |
+| `src/core/rag/retriever.py` | [NEW] Retriever 클래스 및 결과 데이터클래스 |
 
-### 수정 파일
+### 테스트 파일
 
-| 파일                                       | 수정 사항              |
-| ------------------------------------------ | ---------------------- |
-| `src/core/llm/__init__.py`                 | LLMFactory export 추가 |
-| `src/tasktests/phase2/test_llm_factory.py` | [NEW] 통합 테스트      |
+| 파일                                     | 역할                             |
+| ---------------------------------------- | -------------------------------- |
+| `src/tasktests/phase2/test_retriever.py` | [NEW] Retriever 단위/통합 테스트 |
 
 ---
 
 ## 파일별 상세 계획
 
-### [NEW] `src/core/llm/factory.py`
+### [NEW] `src/core/rag/retriever.py`
 
 ```python
 """
-LLM Factory
+Retriever Module
 
-Config 기반으로 적절한 LLM을 생성하는 Factory 패턴 구현.
+쿼리 임베딩 → ChromaDB Top-k 검색 → 결과 포맷팅을 담당하는 모듈.
 """
 
-from typing import Union
-
-from .strategy import LLMStrategy, FakeLLM
-from .openai_llm import OpenAILLM
-from .gemini_llm import GeminiLLM
-from .ollama_llm import OllamaLLM
+from dataclasses import dataclass
+from typing import List, Optional, Dict, Any
 
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from config.models import (
-    OpenAILLMConfig,
-    GeminiLLMConfig,
-    OllamaLLMConfig,
-    LLMConfig,
-)
+from db.chroma_store import ChromaStore
 
 
-class LLMFactory:
+# ============================================================================
+# Data Classes
+# ============================================================================
+
+@dataclass
+class RetrievedChunk:
+    """검색된 청크 정보를 담는 데이터클래스."""
+
+    id: str                  # 청크 고유 ID
+    text: str                # 청크 본문
+    metadata: Dict[str, Any] # 메타데이터 (source, folder_path, headers 등)
+    distance: float          # L2 거리 (낮을수록 유사)
+    score: float             # 유사도 점수 (0~1, 높을수록 유사)
+
+
+@dataclass
+class RetrievalResult:
+    """검색 결과 전체를 담는 데이터클래스."""
+
+    query: str                      # 원본 쿼리
+    chunks: List[RetrievedChunk]    # 검색된 청크 목록
+    total_count: int                # 검색된 청크 수
+
+    @property
+    def top_chunk(self) -> Optional[RetrievedChunk]:
+        """가장 관련성 높은 청크 반환."""
+        return self.chunks[0] if self.chunks else None
+
+
+# ============================================================================
+# Retriever Class
+# ============================================================================
+
+class Retriever:
     """
-    Config 기반 LLM 팩토리.
+    ChromaDB 기반 문서 검색기.
 
     사용법:
-        # OpenAI LLM 생성
-        config = OpenAILLMConfig(model_name="gpt-4o-mini")
-        llm = LLMFactory.create(config)
+        # 기본 사용
+        store = ChromaStore()
+        retriever = Retriever(store)
+        result = retriever.retrieve("What is RAG?", top_k=5)
 
-        # Gemini LLM 생성
-        config = GeminiLLMConfig(model_name="gemini-1.5-flash")
-        llm = LLMFactory.create(config)
+        for chunk in result.chunks:
+            print(f"[{chunk.score:.3f}] {chunk.text[:100]}...")
 
-        # Ollama LLM 생성
-        config = OllamaLLMConfig(model_name="llama3")
-        llm = LLMFactory.create(config)
-
-        # 테스트용 Fake LLM
-        llm = LLMFactory.create_fake(response="Test response")
+        # 메타데이터 필터링
+        result = retriever.retrieve(
+            query="Python tutorial",
+            top_k=3,
+            where={"folder_path": {"$contains": "programming"}}
+        )
     """
 
-    @staticmethod
-    def create(config: LLMConfig) -> LLMStrategy:
+    def __init__(self, store: ChromaStore):
         """
-        Config 기반 LLM 생성.
+        Args:
+            store: ChromaDB 벡터 스토어 인스턴스
+        """
+        self._store = store
+
+    def retrieve(
+        self,
+        query: str,
+        top_k: int = 5,
+        where: Optional[Dict[str, Any]] = None,
+        where_document: Optional[Dict[str, Any]] = None,
+    ) -> RetrievalResult:
+        """
+        쿼리와 유사한 청크를 검색합니다.
 
         Args:
-            config: OpenAILLMConfig, GeminiLLMConfig, 또는 OllamaLLMConfig
+            query: 검색 쿼리 문자열
+            top_k: 반환할 최대 결과 수
+            where: 메타데이터 필터 (예: {"source": "note.md"})
+            where_document: 문서 내용 필터 (예: {"$contains": "keyword"})
 
         Returns:
-            LLMStrategy 프로토콜을 구현한 LLM 인스턴스
-
-        Raises:
-            ValueError: 알 수 없는 provider인 경우
+            RetrievalResult 객체 (검색된 청크 목록 포함)
         """
-        if config.provider == "openai":
-            if not isinstance(config, OpenAILLMConfig):
-                raise TypeError("OpenAI provider requires OpenAILLMConfig")
-            return OpenAILLM(
-                model_name=config.model_name,
-                api_key=config.api_key,
-            )
+        # ChromaStore.query() 호출
+        raw_results = self._store.query(
+            query_text=query,
+            n_results=top_k,
+            where=where,
+            where_document=where_document,
+        )
 
-        elif config.provider == "gemini":
-            if not isinstance(config, GeminiLLMConfig):
-                raise TypeError("Gemini provider requires GeminiLLMConfig")
-            return GeminiLLM(
-                model_name=config.model_name,
-                api_key=config.api_key,
+        # 결과 변환
+        chunks = [
+            RetrievedChunk(
+                id=r["id"],
+                text=r["text"] or "",
+                metadata=r["metadata"] or {},
+                distance=r["distance"] or 0.0,
+                score=self._distance_to_score(r["distance"]),
             )
+            for r in raw_results
+        ]
 
-        elif config.provider == "ollama":
-            if not isinstance(config, OllamaLLMConfig):
-                raise TypeError("Ollama provider requires OllamaLLMConfig")
-            return OllamaLLM(
-                model_name=config.model_name,
-                base_url=config.base_url,
-            )
-
-        else:
-            raise ValueError(
-                f"Unknown provider: {config.provider}. "
-                "Supported providers: 'openai', 'gemini', 'ollama'"
-            )
+        return RetrievalResult(
+            query=query,
+            chunks=chunks,
+            total_count=len(chunks),
+        )
 
     @staticmethod
-    def create_fake(response: str = "This is a fake response.") -> FakeLLM:
+    def _distance_to_score(distance: Optional[float]) -> float:
         """
-        테스트용 Fake LLM 생성.
+        L2 거리를 0~1 유사도 점수로 변환.
+
+        공식: score = 1 / (1 + distance)
+        - distance=0 → score=1.0 (완전 일치)
+        - distance=∞ → score→0 (전혀 유사하지 않음)
+        """
+        if distance is None:
+            return 0.0
+        return 1.0 / (1.0 + distance)
+
+    def retrieve_with_context(
+        self,
+        query: str,
+        top_k: int = 5,
+        context_format: str = "numbered",
+    ) -> str:
+        """
+        검색 결과를 프롬프트에 주입할 수 있는 컨텍스트 문자열로 반환.
 
         Args:
-            response: 반환할 고정 응답 문자열
+            query: 검색 쿼리
+            top_k: 반환할 최대 결과 수
+            context_format: "numbered" | "simple"
 
         Returns:
-            FakeLLM 인스턴스
+            포맷팅된 컨텍스트 문자열
         """
-        return FakeLLM(response=response)
+        result = self.retrieve(query, top_k=top_k)
+
+        if not result.chunks:
+            return ""
+
+        if context_format == "numbered":
+            lines = []
+            for i, chunk in enumerate(result.chunks, 1):
+                source = chunk.metadata.get("source", "unknown")
+                lines.append(f"[{i}] Source: {source}")
+                lines.append(chunk.text)
+                lines.append("")
+            return "\n".join(lines).strip()
+
+        else:  # simple
+            return "\n\n---\n\n".join(c.text for c in result.chunks)
 ```
 
 ---
 
-### [MODIFY] `src/core/llm/__init__.py`
+### [NEW] `src/core/rag/__init__.py`
 
-```diff
- from .strategy import LLMStrategy, LLMResponse, FakeLLM, Message
- from .openai_llm import OpenAILLM
- from .gemini_llm import GeminiLLM
- from .ollama_llm import OllamaLLM
-+from .factory import LLMFactory
+```python
+# RAG Module
+"""RAG 파이프라인 모듈"""
 
- __all__ = [
-     "LLMStrategy",
-     "LLMResponse",
-     "FakeLLM",
-     "Message",
-     "OpenAILLM",
-     "GeminiLLM",
-     "OllamaLLM",
-+    "LLMFactory",
- ]
+from .retriever import Retriever, RetrievedChunk, RetrievalResult
+
+__all__ = [
+    "Retriever",
+    "RetrievedChunk",
+    "RetrievalResult",
+]
 ```
 
 ---
 
-### [NEW] `src/tasktests/phase2/test_llm_factory.py`
+### [NEW] `src/tasktests/phase2/test_retriever.py`
 
 ```python
 """
-LLMFactory 통합 테스트
+Retriever 단위/통합 테스트
 
-각 Provider별 LLM 생성 및 FakeLLM 테스트.
-실제 API 호출이 필요한 테스트는 환경변수 없으면 skip.
+FakeEmbedder를 사용한 단위 테스트와 실제 임베딩을 사용한 통합 테스트를 포함.
 """
 
 import os
 import pytest
+import tempfile
+from pathlib import Path
 
-from core.llm import LLMFactory, LLMStrategy, FakeLLM
-from config.models import (
-    OpenAILLMConfig,
-    GeminiLLMConfig,
-    OllamaLLMConfig,
-)
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-
-class TestLLMFactoryFake:
-    """FakeLLM 테스트 (외부 의존성 없음)"""
-
-    def test_create_fake_default_response(self):
-        """기본 응답으로 FakeLLM 생성"""
-        llm = LLMFactory.create_fake()
-        assert isinstance(llm, FakeLLM)
-
-        response = llm.generate([{"role": "user", "content": "Hello"}])
-        assert response.content == "This is a fake response."
-
-    def test_create_fake_custom_response(self):
-        """커스텀 응답으로 FakeLLM 생성"""
-        llm = LLMFactory.create_fake(response="Custom answer")
-        response = llm.generate([{"role": "user", "content": "Test"}])
-        assert response.content == "Custom answer"
+from core.rag import Retriever, RetrievedChunk, RetrievalResult
+from core.embedding import FakeEmbedder
+from db.chroma_store import ChromaStore
 
 
-class TestLLMFactoryOpenAI:
-    """OpenAI LLM Factory 테스트"""
+class TestRetrieverUnit:
+    """FakeEmbedder를 사용한 단위 테스트 (외부 의존성 없음)"""
 
     @pytest.fixture
-    def api_key(self):
-        key = os.getenv("OPENAI_API_KEY")
-        if not key:
-            pytest.skip("OPENAI_API_KEY not set")
-        return key
+    def store_with_data(self, tmp_path):
+        """테스트 데이터가 포함된 ChromaStore 생성"""
+        embedder = FakeEmbedder(dimension=8)
+        store = ChromaStore(
+            persist_path=str(tmp_path / "chroma"),
+            collection_name="test_retriever",
+            embedder=embedder,
+        )
 
-    def test_create_openai_from_config(self, api_key):
-        """Config로 OpenAI LLM 생성"""
-        config = OpenAILLMConfig(model_name="gpt-4o-mini", api_key=api_key)
-        llm = LLMFactory.create(config)
+        # 테스트 청크 추가
+        from core.preprocessing.markdown_preprocessor import Chunk
+        chunks = [
+            Chunk(
+                text="Python is a programming language",
+                metadata={"source": "python.md", "folder_path": "programming"}
+            ),
+            Chunk(
+                text="Machine learning uses algorithms",
+                metadata={"source": "ml.md", "folder_path": "ai"}
+            ),
+            Chunk(
+                text="RAG combines retrieval and generation",
+                metadata={"source": "rag.md", "folder_path": "ai"}
+            ),
+        ]
+        store.add_chunks(chunks)
 
-        assert llm.model_name == "gpt-4o-mini"
+        yield store
+        store.clear()
 
-    def test_openai_generate(self, api_key):
-        """OpenAI 실제 API 호출 테스트"""
-        config = OpenAILLMConfig(model_name="gpt-4o-mini", api_key=api_key)
-        llm = LLMFactory.create(config)
+    def test_retrieve_returns_result(self, store_with_data):
+        """기본 검색이 RetrievalResult를 반환하는지 확인"""
+        retriever = Retriever(store_with_data)
+        result = retriever.retrieve("programming", top_k=3)
 
-        response = llm.generate([
-            {"role": "user", "content": "Say 'hello' only."}
-        ], temperature=0.0, max_tokens=10)
+        assert isinstance(result, RetrievalResult)
+        assert result.query == "programming"
+        assert len(result.chunks) <= 3
 
-        assert "hello" in response.content.lower()
+    def test_retrieved_chunk_has_all_fields(self, store_with_data):
+        """RetrievedChunk가 필수 필드를 모두 포함하는지 확인"""
+        retriever = Retriever(store_with_data)
+        result = retriever.retrieve("test", top_k=1)
+
+        if result.chunks:
+            chunk = result.chunks[0]
+            assert hasattr(chunk, "id")
+            assert hasattr(chunk, "text")
+            assert hasattr(chunk, "metadata")
+            assert hasattr(chunk, "distance")
+            assert hasattr(chunk, "score")
+            assert 0.0 <= chunk.score <= 1.0
+
+    def test_top_chunk_property(self, store_with_data):
+        """top_chunk 프로퍼티가 정상 동작하는지 확인"""
+        retriever = Retriever(store_with_data)
+        result = retriever.retrieve("test", top_k=3)
+
+        if result.chunks:
+            assert result.top_chunk == result.chunks[0]
+
+    def test_empty_result_top_chunk_is_none(self, tmp_path):
+        """결과가 없을 때 top_chunk가 None인지 확인"""
+        embedder = FakeEmbedder(dimension=8)
+        empty_store = ChromaStore(
+            persist_path=str(tmp_path / "empty_chroma"),
+            collection_name="empty_test",
+            embedder=embedder,
+        )
+        retriever = Retriever(empty_store)
+        result = retriever.retrieve("nonexistent")
+
+        assert result.top_chunk is None
+        assert result.total_count == 0
+
+    def test_distance_to_score_conversion(self):
+        """거리 → 점수 변환이 올바른지 확인"""
+        # distance=0 → score=1.0
+        assert Retriever._distance_to_score(0.0) == 1.0
+
+        # distance=1 → score=0.5
+        assert Retriever._distance_to_score(1.0) == 0.5
+
+        # distance=None → score=0.0
+        assert Retriever._distance_to_score(None) == 0.0
+
+    def test_retrieve_with_context_numbered(self, store_with_data):
+        """numbered 포맷 컨텍스트 생성 확인"""
+        retriever = Retriever(store_with_data)
+        context = retriever.retrieve_with_context("test", top_k=2, context_format="numbered")
+
+        assert "[1]" in context or context == ""
+
+    def test_retrieve_with_context_simple(self, store_with_data):
+        """simple 포맷 컨텍스트 생성 확인"""
+        retriever = Retriever(store_with_data)
+        context = retriever.retrieve_with_context("test", top_k=2, context_format="simple")
+
+        # 결과가 있으면 구분자 포함, 없으면 빈 문자열
+        assert "---" in context or context == "" or len(context) > 0
 
 
-class TestLLMFactoryGemini:
-    """Gemini LLM Factory 테스트"""
+class TestRetrieverWithMetadataFilter:
+    """메타데이터 필터 테스트"""
 
     @pytest.fixture
-    def api_key(self):
-        key = os.getenv("GOOGLE_API_KEY")
-        if not key:
-            pytest.skip("GOOGLE_API_KEY not set")
-        return key
+    def store_with_folders(self, tmp_path):
+        """폴더 메타데이터가 있는 테스트 데이터"""
+        embedder = FakeEmbedder(dimension=8)
+        store = ChromaStore(
+            persist_path=str(tmp_path / "chroma_filter"),
+            collection_name="filter_test",
+            embedder=embedder,
+        )
 
-    def test_create_gemini_from_config(self, api_key):
-        """Config로 Gemini LLM 생성"""
-        config = GeminiLLMConfig(model_name="gemini-1.5-flash", api_key=api_key)
-        llm = LLMFactory.create(config)
+        from core.preprocessing.markdown_preprocessor import Chunk
+        chunks = [
+            Chunk(text="AI content 1", metadata={"source": "a.md", "folder_path": "ai"}),
+            Chunk(text="AI content 2", metadata={"source": "b.md", "folder_path": "ai"}),
+            Chunk(text="Web content", metadata={"source": "c.md", "folder_path": "web"}),
+        ]
+        store.add_chunks(chunks)
 
-        assert llm.model_name == "gemini-1.5-flash"
+        yield store
+        store.clear()
 
+    def test_where_filter(self, store_with_folders):
+        """메타데이터 필터가 동작하는지 확인"""
+        retriever = Retriever(store_with_folders)
+        result = retriever.retrieve(
+            query="content",
+            top_k=10,
+            where={"folder_path": "ai"}
+        )
 
-class TestLLMFactoryOllama:
-    """Ollama LLM Factory 테스트 (로컬 서버 필요)"""
-
-    def test_create_ollama_from_config(self):
-        """Config로 Ollama LLM 생성 (인스턴스 생성만)"""
-        config = OllamaLLMConfig(model_name="llama3")
-        llm = LLMFactory.create(config)
-
-        assert llm.model_name == "llama3"
-        assert llm.base_url == "http://localhost:11434"
-
-
-class TestLLMFactoryErrors:
-    """Factory 에러 케이스 테스트"""
-
-    def test_invalid_provider_raises_error(self):
-        """잘못된 provider 에러"""
-        # 직접 config를 조작하여 테스트
-        config = OpenAILLMConfig()
-        config.provider = "invalid"  # type: ignore
-
-        with pytest.raises(ValueError, match="Unknown provider"):
-            LLMFactory.create(config)
+        # AI 폴더의 문서만 반환되어야 함
+        for chunk in result.chunks:
+            assert chunk.metadata.get("folder_path") == "ai"
 
 
 if __name__ == "__main__":
@@ -317,52 +423,75 @@ if __name__ == "__main__":
 ### Automated Tests
 
 ```bash
-# 전체 테스트 실행 (API 키 없으면 일부 skip)
+# 전체 Retriever 테스트 실행
 cd /Users/imseungmin/work/portfolio/obsidian_RAG/obrag
-python -m pytest src/tasktests/phase2/test_llm_factory.py -v
+python -m pytest src/tasktests/phase2/test_retriever.py -v
 
-# FakeLLM만 테스트 (외부 의존성 없음)
-python -m pytest src/tasktests/phase2/test_llm_factory.py::TestLLMFactoryFake -v
+# 단위 테스트만 실행 (외부 의존성 없음)
+python -m pytest src/tasktests/phase2/test_retriever.py::TestRetrieverUnit -v
 ```
 
 ### Manual Verification
 
-1. **OpenAI API 호출 확인** (OPENAI_API_KEY 설정 시):
+1. **실제 데이터로 검색 확인** (옵시디언 노트가 있을 때):
 
-   ```bash
-   OPENAI_API_KEY=sk-... python -m pytest src/tasktests/phase2/test_llm_factory.py::TestLLMFactoryOpenAI -v
-   ```
+```python
+# 대화형 테스트
+cd /Users/imseungmin/work/portfolio/obsidian_RAG/obrag
+python -c "
+from core.rag import Retriever
+from db.chroma_store import ChromaStore
 
-2. **Gemini API 호출 확인** (GOOGLE_API_KEY 설정 시):
+# 기존 DB 연결 (실제 데이터가 있는 경우)
+store = ChromaStore(persist_path='./chroma_db')
+retriever = Retriever(store)
 
-   ```bash
-   GOOGLE_API_KEY=... python -m pytest src/tasktests/phase2/test_llm_factory.py::TestLLMFactoryGemini -v
-   ```
+result = retriever.retrieve('Python programming', top_k=3)
+print(f'Query: {result.query}')
+print(f'Found: {result.total_count} chunks')
+for i, chunk in enumerate(result.chunks, 1):
+    print(f'[{i}] Score: {chunk.score:.3f}')
+    print(f'    Source: {chunk.metadata.get(\"source\", \"unknown\")}')
+    print(f'    Text: {chunk.text[:100]}...')
+"
+```
 
-3. **Ollama 연동 확인** (로컬 서버 실행 시):
+2. **컨텍스트 포맷팅 확인**:
 
-   ```bash
-   # Ollama 서버 시작 후
-   python -c "
-   from core.llm import LLMFactory
-   from config.models import OllamaLLMConfig
+```python
+cd /Users/imseungmin/work/portfolio/obsidian_RAG/obrag
+python -c "
+from core.rag import Retriever
+from core.embedding import FakeEmbedder
+from db.chroma_store import ChromaStore
+from core.preprocessing.markdown_preprocessor import Chunk
+import tempfile
 
-   config = OllamaLLMConfig(model_name='llama3')
-   llm = LLMFactory.create(config)
-   response = llm.generate([{'role': 'user', 'content': 'Hello'}])
-   print(response.content)
-   "
-   ```
+# 테스트 데이터 생성
+with tempfile.TemporaryDirectory() as tmp:
+    embedder = FakeEmbedder(dimension=8)
+    store = ChromaStore(persist_path=tmp, embedder=embedder)
+    store.add_chunks([
+        Chunk(text='First document about AI', metadata={'source': 'ai.md'}),
+        Chunk(text='Second document about ML', metadata={'source': 'ml.md'}),
+    ])
+
+    retriever = Retriever(store)
+    context = retriever.retrieve_with_context('test', top_k=2)
+    print('=== Numbered Format ===')
+    print(context)
+"
+```
 
 ---
 
 ## 요약
 
-| 항목            | 내용                                       |
-| --------------- | ------------------------------------------ |
-| **신규 파일**   | `src/core/llm/factory.py`                  |
-| **수정 파일**   | `src/core/llm/__init__.py`                 |
-| **테스트 파일** | `src/tasktests/phase2/test_llm_factory.py` |
-| **참고 패턴**   | `EmbedderFactory` (동일 구조)              |
-| **외부 의존성** | 없음 (기존 LLM 구현체 재사용)              |
-| **예상 소요**   | 1-2시간                                    |
+| 항목            | 내용                                                      |
+| --------------- | --------------------------------------------------------- |
+| **신규 파일**   | `src/core/rag/retriever.py`, `src/core/rag/__init__.py`   |
+| **테스트 파일** | `src/tasktests/phase2/test_retriever.py`                  |
+| **참고 패턴**   | `ChromaStore.query()` (래핑), `EmbedderFactory` (DI 구조) |
+| **핵심 클래스** | `Retriever`, `RetrievedChunk`, `RetrievalResult`          |
+| **외부 의존성** | 없음 (기존 `ChromaStore` 재사용)                          |
+| **예상 소요**   | 1-2시간                                                   |

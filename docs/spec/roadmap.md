@@ -1,7 +1,7 @@
 # Product Roadmap
 
-> **Last Update**: 2026-01-25 01:35
-> **Current Status**: LLMFactory & Config 완료. 멀티 LLM 지원 Sub-task 모두 완료. 다음은 RAG 파이프라인 구현 예정.
+> **Last Update**: 2026-01-25 23:27
+> **Current Status**: Retriever Module 구현 완료. PromptBuilder → RAGChain 순서로 구현 예정.
 > **Note**: API 키 미설정 시 OpenAI/Gemini 테스트 skip 처리됨 (`test_llm_factory.py`)
 
 > 이 로드맵은 프로젝트의 큰 흐름을 정의합니다. 세부 태스크는 각 단계가 진행됨에 따라 동적으로 생성됩니다.
@@ -22,11 +22,14 @@
 ## Phase 2: RAG 채팅 기능 (Intelligent Chat)
 
 - [x] **임베딩 모델 통합**: BGE-M3(로컬) / text-embedding-3-small(클라우드) 선택 가능
-- [ ] **멀티 LLM 지원**: OpenAI, Gemini, Ollama 연동 및 전환 기능
+- [x] **멀티 LLM 지원**: OpenAI, Gemini, Ollama 연동 및 전환 기능
   - [x] **LLMStrategy Protocol**: LLM 호출을 위한 공통 인터페이스 정의 (`src/core/llm/strategy.py`)
   - [x] **LLM Provider 구현체**: OpenAI, Gemini, Ollama 각각의 클라이언트 구현
   - [x] **LLMFactory & Config**: Config 기반 LLM 인스턴스 생성 Factory 및 통합 테스트
 - [ ] **RAG 파이프라인**: 벡터 검색 + 컨텍스트 주입 + LLM 응답 생성
+  - [x] **Retriever Module**: 쿼리 임베딩 및 ChromaDB Top-k 검색, 결과 포맷팅 (`src/core/rag/retriever.py`)
+  - [ ] **PromptBuilder**: 검색된 청크를 Context로 주입하는 프롬프트 템플릿 빌더 (`src/core/rag/prompt.py`)
+  - [ ] **RAGChain**: Retriever + PromptBuilder + LLM을 연결하는 통합 파이프라인 (`src/core/rag/chain.py`)
 - [ ] **FastAPI 백엔드**: REST API 엔드포인트 구현
 
 ---
