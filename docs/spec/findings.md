@@ -247,6 +247,34 @@
 
 ---
 
+## 2026-01-25: RAGChain & PromptBuilder 구현
+
+### Decisions (기술적 의사결정)
+
+#### 1. PromptBuilder 분리
+
+- **결정**: 프롬프트 생성 로직을 `RAGChain` 내부가 아닌 별도 `PromptBuilder` 클래스로 분리
+- **이유**:
+  - **책임 분리**: `RAGChain`은 실행 흐름 제어, `PromptBuilder`는 텍스트 포맷팅 담당
+  - **템플릿 유연성**: 다양한 Prompt Template(Q&A, 요약, 번역 등)을 쉽게 교체 가능
+  - **테스트 용이성**: 검색 없이 프롬프트 생성 로직만 독립적 테스트 가능
+
+#### 2. RAGResponse 구조화
+
+- **결정**: `RAGChain.query()` 반환값을 단순 `str`이 아닌 `RAGResponse` 데이터클래스로 정의
+- **이유**:
+  - 단순 답변 외에 **근거 문서(RetrievalResult)**와 **토큰 사용량(Usage)** 정보를 함께 제공해야 함
+  - 추후 UI에서 "Show Sources" 기능 구현 시 필수적
+
+#### 3. Composition 기반 RAGChain
+
+- **결정**: `RAGChain`은 `Retriever`와 `LLMStrategy`를 상속받지 않고 인스턴스로 주입받음 (Composition)
+- **이유**:
+  - 유연한 조합 가능 (예: 같은 Retriever에 다른 LLM 연결)
+  - 명확한 데이터 흐름: `Query` → `Retriever` → `Context` → `Prompt` → `LLM` → `Answer`
+
+---
+
 ### Discoveries (외부 지식)
 
 #### Gemini API 메시지 형식 변환
