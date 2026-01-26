@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-01-26: RAG Chat Endpoints 구현
+
+### Decisions (기술적 의사결정)
+
+#### 1. LLM 스트리밍 메서드 추가
+
+- **결정**: `stream_generate()` 메서드를 `LLMStrategy` Protocol 및 모든 구현체에 추가
+- **이유**:
+  - SSE(Server-Sent Events) 기반 실시간 응답 지원 필요
+  - 사용자 경험 개선: 긴 응답도 즉시 첫 토큰 표시
+- **구현**:
+  - OpenAI/Ollama: `stream=True` 파라미터 사용
+  - Gemini: `generate_content_stream()` 메서드 사용
+  - FakeLLM: 단어 단위 yield로 테스트 지원
+
+#### 2. SSE 응답 구조 설계
+
+- **결정**: 스트리밍 시작 시 `sources` 정보를 먼저 전송, 이후 텍스트 청크 스트리밍
+- **이유**:
+  - 프론트엔드에서 근거 문서를 먼저 표시하고, 답변은 순차적으로 렌더링 가능
+  - `type` 필드로 이벤트 종류 구분 (`start`, `content`, `done`)
+- **형식**:
+  ```
+  data: {"type": "start", "sources": [...], "model": "..."}
+  data: {"type": "content", "content": "첫 번째 "}
+  data: {"type": "content", "content": "토큰..."}
+  data: {"type": "done"}
+  ```
+
+#### 3. Pydantic `field_validator`를 통한 입력 검증
+
+- **결정**: ChatRequest에 `Field(..., ge=0, le=2.0)` 등의 제약 조건 적용
+- **이유**:
+  - 422 Validation Error로 잘못된 입력 사전 차단
+  - OpenAPI 문서에 자동 반영되어 API 사용자에게 명확한 가이드 제공
+- **주의**: `min_length=1`로 빈 question 방지
+
+---
+
 ## 2026-01-25: Retriever Module 구현
 
 ### Decisions (기술적 의사결정)

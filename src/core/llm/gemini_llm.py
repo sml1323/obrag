@@ -4,7 +4,7 @@ Gemini LLM Implementation
 Google Gemini API를 사용한 LLMStrategy 구현체.
 """
 
-from typing import List, Optional
+from typing import Iterator, List, Optional
 
 from google import genai
 from google.genai import types
@@ -106,6 +106,42 @@ class GeminiLLM:
                 ))
         
         return contents, system_instruction
+    
+    def stream_generate(
+        self,
+        messages: List[Message],
+        *,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+    ) -> Iterator[str]:
+        """
+        Gemini 스트리밍 응답 생성.
+        
+        Args:
+            messages: 대화 메시지 리스트 (OpenAI 형식)
+            temperature: 응답 다양성
+            max_tokens: 최대 토큰 수
+        
+        Yields:
+            응답 텍스트 청크
+        """
+        contents, system_instruction = self._convert_messages(messages)
+        
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+            system_instruction=system_instruction,
+        )
+        
+        response = self._client.models.generate_content_stream(
+            model=self._model_name,
+            contents=contents,
+            config=config,
+        )
+        
+        for chunk in response:
+            if chunk.text:
+                yield chunk.text
     
     @property
     def model_name(self) -> str:

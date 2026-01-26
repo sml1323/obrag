@@ -5,7 +5,7 @@ Retriever + PromptBuilder + LLM을 연결하는 통합 RAG 파이프라인.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Iterator, List, Optional, Tuple
 
 from .retriever import Retriever, RetrievalResult
 from .prompt import PromptBuilder, PromptTemplate, DEFAULT_RAG_TEMPLATE
@@ -159,3 +159,36 @@ class RAGChain:
             model=llm_response.model,
             usage=llm_response.usage,
         )
+
+    def stream_query(
+        self,
+        question: str,
+        *,
+        top_k: int = 5,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+    ) -> Tuple[RetrievalResult, Iterator[str]]:
+        """
+        스트리밍 RAG 응답 생성.
+
+        Returns:
+            (retrieval_result, content_generator) 튜플
+        """
+        # 1. 검색
+        retrieval_result = self._retriever.retrieve(question, top_k=top_k)
+        context = self._retriever.retrieve_with_context(question, top_k=top_k)
+
+        # 2. 프롬프트 생성
+        messages = self._prompt_builder.build(
+            question=question,
+            context=context,
+        )
+
+        # 3. 스트리밍 LLM 호출
+        generator = self._llm.stream_generate(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+        return retrieval_result, generator

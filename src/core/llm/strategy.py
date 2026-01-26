@@ -6,7 +6,7 @@ LLM 호출을 위한 Protocol 및 테스트용 FakeLLM 구현.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Protocol
+from typing import Iterator, List, Optional, Protocol
 
 
 # ============================================================================
@@ -59,6 +59,26 @@ class LLMStrategy(Protocol):
         """
         ...
     
+    def stream_generate(
+        self,
+        messages: List[Message],
+        *,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+    ) -> Iterator[str]:
+        """
+        스트리밍 응답 생성.
+        
+        Args:
+            messages: 대화 메시지 리스트
+            temperature: 응답 다양성 (0.0 ~ 2.0)
+            max_tokens: 최대 토큰 수 (None이면 모델 기본값)
+        
+        Yields:
+            응답 텍스트 청크
+        """
+        ...
+    
     @property
     def model_name(self) -> str:
         """사용 중인 모델 이름"""
@@ -98,6 +118,19 @@ class FakeLLM:
             model=self._model_name,
             usage={"input_tokens": 10, "output_tokens": 5}
         )
+    
+    def stream_generate(
+        self,
+        messages: List[Message],
+        *,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+    ) -> Iterator[str]:
+        """고정된 응답을 청크로 반환"""
+        # 응답을 단어 단위로 스트리밍
+        words = self._response.split()
+        for word in words:
+            yield word + " "
     
     @property
     def model_name(self) -> str:

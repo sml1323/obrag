@@ -4,7 +4,7 @@ OpenAI LLM Implementation
 OpenAI Chat Completion API를 사용한 LLMStrategy 구현체.
 """
 
-from typing import List, Optional
+from typing import Iterator, List, Optional
 
 from openai import OpenAI
 
@@ -64,6 +64,36 @@ class OpenAILLM:
                 "output_tokens": response.usage.completion_tokens if response.usage else 0,
             }
         )
+    
+    def stream_generate(
+        self,
+        messages: List[Message],
+        *,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+    ) -> Iterator[str]:
+        """
+        OpenAI 스트리밍 응답 생성.
+        
+        Args:
+            messages: 대화 메시지 리스트
+            temperature: 응답 다양성
+            max_tokens: 최대 토큰 수
+        
+        Yields:
+            응답 텍스트 청크
+        """
+        response = self._client.chat.completions.create(
+            model=self._model_name,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+        
+        for chunk in response:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
     
     @property
     def model_name(self) -> str:

@@ -79,6 +79,10 @@ def create_app() -> FastAPI:
             }
         return {"status": "initializing"}
 
+    # 라우터 등록
+    from .routers import chat
+    app.include_router(chat.router)
+
     return app
 
 

@@ -1,35 +1,38 @@
-# FastAPI App Foundation 구현 계획
+# RAG Chat Endpoints 구현 계획
 
-> **Target Task**: Phase 2 - FastAPI 백엔드 > App Foundation
-> **Target Path**: `src/api/`
+> **Target Task**: Phase 2 - FastAPI 백엔드 > RAG Chat Endpoints
+> **Target Path**: `src/api/routers/chat.py`
 
 ## 목표
 
-FastAPI 애플리케이션의 기초를 구축합니다:
+RAG 기반 질의응답 엔드포인트를 구현합니다:
 
-- **Lifespan 관리**: 앱 시작/종료 시 리소스(ChromaStore, LLM) 초기화/정리
-- **의존성 주입(DI)**: RAGChain, ChromaStore 등 핵심 객체를 엔드포인트에 주입
-- **CORS 설정**: 프론트엔드(React) 연동을 위한 Cross-Origin 허용
+- `/chat`: 단일 질의 (동기)
+- `/chat/stream`: 스트리밍 응답 (SSE)
+- `/chat/history`: 대화 이력 포함 멀티턴
 
 ---
 
 ## 기존 패턴 분석
 
-### 1. LLMFactory 패턴 (`src/core/llm/factory.py`)
+### 1. DI 패턴 (`deps.py`)
 
-- Config 기반 인스턴스 생성
-- `create()` 정적 메서드로 의존성 생성
-- `create_fake()` 로 테스트용 Mock 지원
+- `AppState` 데이터클래스로 전역 상태 캡슐화
+- `get_rag_chain()` 의존성 함수로 `RAGChain` 주입
+- `request.app.state.deps`를 통한 접근
 
-### 2. RAGChain Composition (`src/core/rag/chain.py`)
+### 2. RAGChain 인터페이스 (`chain.py`)
 
-- Retriever + LLMStrategy를 외부에서 주입받음
-- 명확한 책임 분리 패턴
+```python
+# 이미 구현됨
+chain.query(question, top_k=5, temperature=0.7) -> RAGResponse
+chain.query_with_history(question, history, top_k=5) -> RAGResponse
+```
 
-### 3. ChromaStore (`src/db/chroma_store.py`)
+### 3. LLMStrategy 현황 (`strategy.py`)
 
-- `persist_path`, `collection_name`, `embedder`를 생성자로 받음
-- 상태 확인용 `get_stats()` 메서드 제공
+- `generate()` 메서드만 존재 (동기)
+- **스트리밍 메서드 없음** → 추가 필요
 
 ---
 
@@ -37,307 +40,213 @@ FastAPI 애플리케이션의 기초를 구축합니다:
 
 ```
 src/api/
-├── __init__.py       # [NEW] 모듈 export
-├── main.py           # [NEW] FastAPI 앱, Lifespan, CORS
-└── deps.py           # [NEW] 의존성 주입 함수
+├── routers/           [NEW] 라우터 디렉토리
+│   ├── __init__.py    [NEW]
+│   └── chat.py        [NEW] 채팅 엔드포인트
+├── main.py            [MODIFY] 라우터 등록
+└── deps.py            (변경 없음)
+
+src/core/llm/
+├── strategy.py        [MODIFY] stream_generate() 추가
+├── openai_llm.py      [MODIFY] 스트리밍 구현
+├── gemini_llm.py      [MODIFY] 스트리밍 구현
+└── ollama_llm.py      [MODIFY] 스트리밍 구현
+
+src/core/rag/
+└── chain.py           [MODIFY] stream_query() 추가
+
+src/dtypes/
+└── api.py             [NEW] API 요청/응답 스키마
 ```
 
 ---
 
 ## 파일별 상세 계획
 
-### 1. `src/api/main.py` [NEW]
+### 1. `src/dtypes/api.py` [NEW]
+
+API 요청/응답 Pydantic 모델 정의.
 
 ```python
-"""
-FastAPI Application Entry Point
+from pydantic import BaseModel
+from typing import List, Optional
 
-Lifespan 관리, CORS 설정, 라우터 등록을 담당합니다.
-"""
+class ChatRequest(BaseModel):
+    """채팅 요청 스키마"""
+    question: str
+    top_k: int = 5
+    temperature: float = 0.7
+    max_tokens: Optional[int] = None
 
-from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+class ChatHistoryRequest(ChatRequest):
+    """대화 이력 포함 채팅 요청"""
+    history: List[dict] = []  # [{"role": "user/assistant", "content": "..."}]
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+class SourceChunk(BaseModel):
+    """근거 문서 정보"""
+    content: str
+    source: str
+    score: float
 
-from .deps import AppState, init_app_state
+class ChatResponse(BaseModel):
+    """채팅 응답 스키마"""
+    answer: str
+    sources: List[SourceChunk]
+    model: str
+    usage: dict
 
-
-# ============================================================================
-# Lifespan
-# ============================================================================
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """
-    앱 시작/종료 시 리소스 관리.
-
-    Startup:
-        - ChromaStore 초기화
-        - Embedder 로드
-        - LLM 클라이언트 준비
-        - RAGChain 구성
-
-    Shutdown:
-        - 리소스 정리
-    """
-    # Startup
-    app.state.deps = init_app_state()
-
-    yield
-
-    # Shutdown (필요시 정리 로직)
-    app.state.deps = None
-
-
-# ============================================================================
-# App Factory
-# ============================================================================
-
-def create_app() -> FastAPI:
-    """FastAPI 앱 팩토리."""
-
-    app = FastAPI(
-        title="Obsidian RAG API",
-        description="Obsidian 노트 기반 RAG 채팅 API",
-        version="0.1.0",
-        lifespan=lifespan,
-    )
-
-    # CORS 설정
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],  # 개발 환경용, 프로덕션에서는 특정 origin만 허용
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
-    # Health check 엔드포인트
-    @app.get("/health")
-    async def health_check():
-        return {"status": "healthy"}
-
-    @app.get("/status")
-    async def get_status():
-        """앱 상태 및 DB 정보 반환."""
-        deps = app.state.deps
-        if deps and deps.chroma_store:
-            return {
-                "status": "ready",
-                "db": deps.chroma_store.get_stats(),
-            }
-        return {"status": "initializing"}
-
-    return app
-
-
-# 앱 인스턴스 (uvicorn에서 직접 import용)
-app = create_app()
+class StreamChunk(BaseModel):
+    """스트리밍 청크"""
+    content: str
+    done: bool = False
 ```
 
-### 2. `src/api/deps.py` [NEW]
+---
+
+### 2. `src/core/llm/strategy.py` [MODIFY]
+
+스트리밍 메서드를 Protocol에 추가.
 
 ```python
-"""
-Dependency Injection Module
+from typing import Iterator, AsyncIterator
 
-FastAPI 엔드포인트에 주입할 의존성을 정의합니다.
-"""
+class LLMStrategy(Protocol):
+    # 기존 generate() 유지
 
-from dataclasses import dataclass
-from typing import Optional
-from pathlib import Path
-import os
+    def stream_generate(
+        self,
+        messages: List[Message],
+        *,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+    ) -> Iterator[str]:
+        """스트리밍 응답 생성 (Generator)"""
+        ...
+```
 
-from dotenv import load_dotenv
+---
 
-# .env 파일 로드 (src/.env)
-_env_path = Path(__file__).parent.parent / ".env"
-load_dotenv(_env_path)
+### 3. `src/core/llm/openai_llm.py` [MODIFY]
 
-from fastapi import Request
-from core.rag import RAGChain, Retriever
-from core.llm import LLMFactory
-from core.embedding import EmbedderFactory
-from db.chroma_store import ChromaStore
-from config.models import OpenAILLMConfig, OpenAIEmbeddingConfig
+OpenAI 스트리밍 구현.
 
+```python
+def stream_generate(
+    self,
+    messages: List[Message],
+    *,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+) -> Iterator[str]:
+    response = self._client.chat.completions.create(
+        model=self._model_name,
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        stream=True,  # 스트리밍 활성화
+    )
+    for chunk in response:
+        if chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
+```
 
-# ============================================================================
-# App State
-# ============================================================================
+---
 
-@dataclass
-class AppState:
-    """앱 전역 상태 (Lifespan에서 초기화)."""
+### 4. `src/core/rag/chain.py` [MODIFY]
 
-    chroma_store: ChromaStore
-    rag_chain: RAGChain
+스트리밍 query 메서드 추가.
 
-
-def init_app_state(
-    chroma_path: str = "./chroma_db",
-    collection_name: str = "obsidian_notes",
-) -> AppState:
-    """
-    앱 상태 초기화.
-
-    환경변수에서 설정을 읽고 필요한 객체들을 생성합니다.
-
-    Args:
-        chroma_path: ChromaDB 저장 경로
-        collection_name: 컬렉션 이름
+```python
+def stream_query(
+    self,
+    question: str,
+    *,
+    top_k: int = 5,
+    temperature: float = 0.7,
+) -> tuple[RetrievalResult, Iterator[str]]:
+    """스트리밍 RAG 응답 생성.
 
     Returns:
-        초기화된 AppState
+        (retrieval_result, content_generator)
     """
-    # 1. Embedder 생성
-    embed_config = OpenAIEmbeddingConfig(
-        model_name=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-    )
-    embedder = EmbedderFactory.create(embed_config)
+    retrieval_result = self._retriever.retrieve(question, top_k=top_k)
+    context = self._retriever.retrieve_with_context(question, top_k=top_k)
+    messages = self._prompt_builder.build(question=question, context=context)
 
-    # 2. ChromaStore 생성
-    chroma_store = ChromaStore(
-        persist_path=chroma_path,
-        collection_name=collection_name,
-        embedder=embedder,
-    )
-
-    # 3. LLM 생성
-    llm_config = OpenAILLMConfig(
-        model_name=os.getenv("LLM_MODEL", "gpt-4o-mini")
-    )
-    llm = LLMFactory.create(llm_config)
-
-    # 4. Retriever + RAGChain 생성
-    retriever = Retriever(chroma_store)
-    rag_chain = RAGChain(retriever=retriever, llm=llm)
-
-    return AppState(
-        chroma_store=chroma_store,
-        rag_chain=rag_chain,
-    )
-
-
-# ============================================================================
-# Dependency Functions
-# ============================================================================
-
-def get_app_state(request: Request) -> AppState:
-    """요청에서 앱 상태 가져오기."""
-    return request.app.state.deps
-
-
-def get_rag_chain(request: Request) -> RAGChain:
-    """RAGChain 의존성 주입."""
-    return request.app.state.deps.rag_chain
-
-
-def get_chroma_store(request: Request) -> ChromaStore:
-    """ChromaStore 의존성 주입."""
-    return request.app.state.deps.chroma_store
+    return retrieval_result, self._llm.stream_generate(messages, temperature=temperature)
 ```
 
-### 3. `src/api/__init__.py` [NEW]
+---
+
+### 5. `src/api/routers/chat.py` [NEW]
+
+채팅 엔드포인트 구현.
 
 ```python
-"""
-API Module
+from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
+from api.deps import get_rag_chain
+from core.rag import RAGChain
+from dtypes.api import ChatRequest, ChatHistoryRequest, ChatResponse
 
-FastAPI 애플리케이션 및 의존성 export.
-"""
+router = APIRouter(prefix="/chat", tags=["chat"])
 
-from .main import app, create_app
-from .deps import AppState, get_app_state, get_rag_chain, get_chroma_store
+@router.post("", response_model=ChatResponse)
+async def chat(request: ChatRequest, chain: RAGChain = Depends(get_rag_chain)):
+    """단일 질의 RAG 응답"""
+    response = chain.query(
+        request.question,
+        top_k=request.top_k,
+        temperature=request.temperature,
+        max_tokens=request.max_tokens,
+    )
+    return ChatResponse(
+        answer=response.answer,
+        sources=[...],  # retrieval_result 변환
+        model=response.model,
+        usage=response.usage,
+    )
+
+@router.post("/stream")
+async def chat_stream(request: ChatRequest, chain: RAGChain = Depends(get_rag_chain)):
+    """SSE 스트리밍 응답"""
+    retrieval_result, generator = chain.stream_query(...)
+
+    async def event_generator():
+        for chunk in generator:
+            yield f"data: {chunk}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@router.post("/history", response_model=ChatResponse)
+async def chat_with_history(request: ChatHistoryRequest, chain: RAGChain = Depends(get_rag_chain)):
+    """대화 이력 포함 멀티턴"""
+    response = chain.query_with_history(
+        request.question,
+        history=request.history,
+        top_k=request.top_k,
+        temperature=request.temperature,
+    )
+    return ChatResponse(...)
 ```
 
-### 4. `src/tasktests/phase2/test_api_foundation.py` [NEW]
+---
+
+### 6. `src/api/main.py` [MODIFY]
+
+라우터 등록.
 
 ```python
-"""FastAPI App Foundation 테스트"""
+from .routers import chat
 
-import pytest
-from pathlib import Path
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+def create_app() -> FastAPI:
+    app = FastAPI(...)
 
-from fastapi.testclient import TestClient
+    # 라우터 등록
+    app.include_router(chat.router)
 
-
-class TestAppCreation:
-    """앱 생성 테스트"""
-
-    def test_create_app_returns_fastapi_instance(self):
-        """create_app()이 FastAPI 인스턴스를 반환하는지 확인"""
-        from api.main import create_app
-        from fastapi import FastAPI
-
-        app = create_app()
-        assert isinstance(app, FastAPI)
-
-    def test_app_has_cors_middleware(self):
-        """CORS 미들웨어가 설정되었는지 확인"""
-        from api.main import create_app
-
-        app = create_app()
-        middleware_names = [m.cls.__name__ for m in app.user_middleware]
-        assert "CORSMiddleware" in middleware_names
-
-
-class TestHealthEndpoint:
-    """헬스체크 엔드포인트 테스트"""
-
-    @pytest.fixture
-    def client(self):
-        from api.main import create_app
-        app = create_app()
-        # Lifespan을 건너뛰고 테스트용 상태 설정
-        return TestClient(app, raise_server_exceptions=False)
-
-    def test_health_returns_200(self, client):
-        """GET /health가 200을 반환하는지 확인"""
-        response = client.get("/health")
-        assert response.status_code == 200
-
-    def test_health_returns_healthy_status(self, client):
-        """GET /health가 healthy 상태를 반환하는지 확인"""
-        response = client.get("/health")
-        assert response.json() == {"status": "healthy"}
-
-
-class TestAppState:
-    """AppState 테스트"""
-
-    def test_app_state_dataclass(self):
-        """AppState가 올바른 필드를 가지는지 확인"""
-        from api.deps import AppState
-        import dataclasses
-
-        assert dataclasses.is_dataclass(AppState)
-        fields = {f.name for f in dataclasses.fields(AppState)}
-        assert "chroma_store" in fields
-        assert "rag_chain" in fields
-
-
-class TestDependencyFunctions:
-    """의존성 주입 함수 테스트"""
-
-    def test_get_rag_chain_exists(self):
-        """get_rag_chain 함수가 존재하는지 확인"""
-        from api.deps import get_rag_chain
-        assert callable(get_rag_chain)
-
-    def test_get_chroma_store_exists(self):
-        """get_chroma_store 함수가 존재하는지 확인"""
-        from api.deps import get_chroma_store
-        assert callable(get_chroma_store)
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    return app
 ```
 
 ---
@@ -346,44 +255,41 @@ if __name__ == "__main__":
 
 ### Automated Tests
 
-1. **단위 테스트 실행**
+테스트 파일: `src/tasktests/phase2/test_api_chat.py`
 
-   ```bash
-   uv run pytest src/tasktests/phase2/test_api_foundation.py -v
-   ```
+```bash
+# 전체 테스트 실행
+cd /Users/imseungmin/work/portfolio/obsidian_RAG/obrag
+python -m pytest src/tasktests/phase2/test_api_chat.py -v
+```
 
-2. **임포트 확인**
+**테스트 항목:**
 
-   ```bash
-   uv run python -c "from src.api import app, create_app; print('Import OK')"
-   ```
+1. **엔드포인트 존재 확인**
+   - `POST /chat` 라우트 존재
+   - `POST /chat/stream` 라우트 존재
+   - `POST /chat/history` 라우트 존재
 
-3. **전체 Phase 2 테스트** (기존 테스트와의 호환성 확인)
-   ```bash
-   uv run pytest src/tasktests/phase2/ -v
-   ```
+2. **정상 응답 테스트 (FakeLLM 사용)**
+   - `/chat` → `ChatResponse` 형식 반환
+   - `/chat/history` → 이력 포함 응답
 
-### Manual Verification
+3. **스트리밍 테스트**
+   - `/chat/stream` → `text/event-stream` Content-Type
+   - SSE 형식 (`data: ...`) 확인
 
-4. **로컬 서버 실행** (OPENAI_API_KEY 필요)
-   ```bash
-   cd src && uv run uvicorn api.main:app --reload --port 8000
-   ```
-5. **헬스체크 확인**
-   ```bash
-   curl http://localhost:8000/health
-   # 예상 응답: {"status":"healthy"}
-   ```
+4. **입력 검증**
+   - 빈 question → 422 에러
+   - 잘못된 temperature 범위 → 검증 에러
 
 ---
 
 ## 요약
 
-| 항목            | 내용                                                        |
-| --------------- | ----------------------------------------------------------- |
-| **신규 파일**   | `src/api/main.py`, `src/api/deps.py`, `src/api/__init__.py` |
-| **테스트 파일** | `src/tasktests/phase2/test_api_foundation.py`               |
-| **핵심 클래스** | `AppState`                                                  |
-| **핵심 함수**   | `create_app()`, `init_app_state()`, `lifespan()`            |
-| **의존성 함수** | `get_rag_chain()`, `get_chroma_store()`, `get_app_state()`  |
-| **엔드포인트**  | `GET /health`, `GET /status`                                |
+| 항목           | 내용                                                                                    |
+| -------------- | --------------------------------------------------------------------------------------- |
+| **새 파일**    | `routers/__init__.py`, `routers/chat.py`, `dtypes/api.py`, `test_api_chat.py`           |
+| **수정 파일**  | `strategy.py`, `openai_llm.py`, `gemini_llm.py`, `ollama_llm.py`, `chain.py`, `main.py` |
+| **엔드포인트** | `POST /chat`, `POST /chat/stream`, `POST /chat/history`                                 |
+| **의존성**     | `pydantic` (이미 FastAPI에 포함)                                                        |
+| **테스트**     | `test_api_chat.py` (단위 + Mock 기반)                                                   |
