@@ -1,334 +1,339 @@
-# RAGChain 구현 계획
+# FastAPI App Foundation 구현 계획
 
-> **Target Task**: Phase 2 - RAG 파이프라인 > RAGChain
-> **Target Path**: `src/core/rag/chain.py`
+> **Target Task**: Phase 2 - FastAPI 백엔드 > App Foundation
+> **Target Path**: `src/api/`
 
 ## 목표
 
-Retriever + PromptBuilder + LLM을 연결하여 **end-to-end RAG 질의응답 파이프라인**을 완성합니다.
-사용자 질문을 받아 관련 문서를 검색하고, 컨텍스트를 주입한 프롬프트를 생성하여 LLM으로 응답을 생성합니다.
+FastAPI 애플리케이션의 기초를 구축합니다:
+
+- **Lifespan 관리**: 앱 시작/종료 시 리소스(ChromaStore, LLM) 초기화/정리
+- **의존성 주입(DI)**: RAGChain, ChromaStore 등 핵심 객체를 엔드포인트에 주입
+- **CORS 설정**: 프론트엔드(React) 연동을 위한 Cross-Origin 허용
 
 ---
 
-## 기존 컴포넌트 분석
+## 기존 패턴 분석
 
-### 1. Retriever (`src/core/rag/retriever.py`)
+### 1. LLMFactory 패턴 (`src/core/llm/factory.py`)
 
-```python
-retriever.retrieve(query, top_k=5) → RetrievalResult
-retriever.retrieve_with_context(query, top_k=5) → str
-```
+- Config 기반 인스턴스 생성
+- `create()` 정적 메서드로 의존성 생성
+- `create_fake()` 로 테스트용 Mock 지원
 
-### 2. PromptBuilder (`src/core/rag/prompt.py`)
+### 2. RAGChain Composition (`src/core/rag/chain.py`)
 
-```python
-builder.build(question, context) → List[Message]
-builder.build_with_history(question, context, history) → List[Message]
-```
+- Retriever + LLMStrategy를 외부에서 주입받음
+- 명확한 책임 분리 패턴
 
-### 3. LLMStrategy (`src/core/llm/strategy.py`)
+### 3. ChromaStore (`src/db/chroma_store.py`)
 
-```python
-llm.generate(messages, temperature=0.7) → LLMResponse
-```
+- `persist_path`, `collection_name`, `embedder`를 생성자로 받음
+- 상태 확인용 `get_stats()` 메서드 제공
 
 ---
 
 ## 제안하는 구조
 
-### 파일 구조
-
 ```
-src/core/rag/
-├── __init__.py     # RAGChain export 추가
-├── retriever.py    # (기존)
-├── prompt.py       # (기존)
-└── chain.py        # [NEW] RAGChain 모듈
+src/api/
+├── __init__.py       # [NEW] 모듈 export
+├── main.py           # [NEW] FastAPI 앱, Lifespan, CORS
+└── deps.py           # [NEW] 의존성 주입 함수
 ```
 
 ---
 
 ## 파일별 상세 계획
 
-### 1. `src/core/rag/chain.py` [NEW]
+### 1. `src/api/main.py` [NEW]
 
 ```python
 """
-RAGChain Module
+FastAPI Application Entry Point
 
-Retriever + PromptBuilder + LLM을 연결하는 통합 RAG 파이프라인.
+Lifespan 관리, CORS 설정, 라우터 등록을 담당합니다.
+"""
+
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from .deps import AppState, init_app_state
+
+
+# ============================================================================
+# Lifespan
+# ============================================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """
+    앱 시작/종료 시 리소스 관리.
+
+    Startup:
+        - ChromaStore 초기화
+        - Embedder 로드
+        - LLM 클라이언트 준비
+        - RAGChain 구성
+
+    Shutdown:
+        - 리소스 정리
+    """
+    # Startup
+    app.state.deps = init_app_state()
+
+    yield
+
+    # Shutdown (필요시 정리 로직)
+    app.state.deps = None
+
+
+# ============================================================================
+# App Factory
+# ============================================================================
+
+def create_app() -> FastAPI:
+    """FastAPI 앱 팩토리."""
+
+    app = FastAPI(
+        title="Obsidian RAG API",
+        description="Obsidian 노트 기반 RAG 채팅 API",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+
+    # CORS 설정
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # 개발 환경용, 프로덕션에서는 특정 origin만 허용
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Health check 엔드포인트
+    @app.get("/health")
+    async def health_check():
+        return {"status": "healthy"}
+
+    @app.get("/status")
+    async def get_status():
+        """앱 상태 및 DB 정보 반환."""
+        deps = app.state.deps
+        if deps and deps.chroma_store:
+            return {
+                "status": "ready",
+                "db": deps.chroma_store.get_stats(),
+            }
+        return {"status": "initializing"}
+
+    return app
+
+
+# 앱 인스턴스 (uvicorn에서 직접 import용)
+app = create_app()
+```
+
+### 2. `src/api/deps.py` [NEW]
+
+```python
+"""
+Dependency Injection Module
+
+FastAPI 엔드포인트에 주입할 의존성을 정의합니다.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
+from pathlib import Path
+import os
 
-from .retriever import Retriever, RetrievalResult
-from .prompt import PromptBuilder, PromptTemplate, DEFAULT_RAG_TEMPLATE
-from core.llm.strategy import LLMStrategy, Message, LLMResponse
+from dotenv import load_dotenv
+
+# .env 파일 로드 (src/.env)
+_env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(_env_path)
+
+from fastapi import Request
+from core.rag import RAGChain, Retriever
+from core.llm import LLMFactory
+from core.embedding import EmbedderFactory
+from db.chroma_store import ChromaStore
+from config.models import OpenAILLMConfig, OpenAIEmbeddingConfig
 
 
 # ============================================================================
-# Data Classes
+# App State
 # ============================================================================
 
 @dataclass
-class RAGResponse:
-    """RAG 파이프라인 응답 데이터"""
+class AppState:
+    """앱 전역 상태 (Lifespan에서 초기화)."""
 
-    answer: str                    # LLM 생성 응답
-    retrieval_result: RetrievalResult  # 검색 결과
-    model: str                     # 사용된 LLM 모델명
-    usage: dict                    # 토큰 사용량
+    chroma_store: ChromaStore
+    rag_chain: RAGChain
+
+
+def init_app_state(
+    chroma_path: str = "./chroma_db",
+    collection_name: str = "obsidian_notes",
+) -> AppState:
+    """
+    앱 상태 초기화.
+
+    환경변수에서 설정을 읽고 필요한 객체들을 생성합니다.
+
+    Args:
+        chroma_path: ChromaDB 저장 경로
+        collection_name: 컬렉션 이름
+
+    Returns:
+        초기화된 AppState
+    """
+    # 1. Embedder 생성
+    embed_config = OpenAIEmbeddingConfig(
+        model_name=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    )
+    embedder = EmbedderFactory.create(embed_config)
+
+    # 2. ChromaStore 생성
+    chroma_store = ChromaStore(
+        persist_path=chroma_path,
+        collection_name=collection_name,
+        embedder=embedder,
+    )
+
+    # 3. LLM 생성
+    llm_config = OpenAILLMConfig(
+        model_name=os.getenv("LLM_MODEL", "gpt-4o-mini")
+    )
+    llm = LLMFactory.create(llm_config)
+
+    # 4. Retriever + RAGChain 생성
+    retriever = Retriever(chroma_store)
+    rag_chain = RAGChain(retriever=retriever, llm=llm)
+
+    return AppState(
+        chroma_store=chroma_store,
+        rag_chain=rag_chain,
+    )
 
 
 # ============================================================================
-# RAGChain Class
+# Dependency Functions
 # ============================================================================
 
-class RAGChain:
-    """
-    End-to-end RAG 파이프라인.
+def get_app_state(request: Request) -> AppState:
+    """요청에서 앱 상태 가져오기."""
+    return request.app.state.deps
 
-    사용법:
-        # 기본 사용
-        chain = RAGChain(retriever=retriever, llm=llm)
-        response = chain.query("What is RAG?")
-        print(response.answer)
 
-        # 커스텀 템플릿 사용
-        chain = RAGChain(
-            retriever=retriever,
-            llm=llm,
-            template=CONCISE_TEMPLATE
-        )
+def get_rag_chain(request: Request) -> RAGChain:
+    """RAGChain 의존성 주입."""
+    return request.app.state.deps.rag_chain
 
-        # top_k 및 temperature 조절
-        response = chain.query(
-            question="Explain Python decorators",
-            top_k=3,
-            temperature=0.5
-        )
-    """
 
-    def __init__(
-        self,
-        retriever: Retriever,
-        llm: LLMStrategy,
-        template: Optional[PromptTemplate] = None,
-    ):
-        """
-        Args:
-            retriever: 벡터 검색을 수행할 Retriever 인스턴스
-            llm: 응답 생성을 위한 LLM 인스턴스
-            template: 프롬프트 템플릿 (기본값: DEFAULT_RAG_TEMPLATE)
-        """
-        self._retriever = retriever
-        self._llm = llm
-        self._prompt_builder = PromptBuilder(template)
-
-    @property
-    def prompt_builder(self) -> PromptBuilder:
-        return self._prompt_builder
-
-    def query(
-        self,
-        question: str,
-        *,
-        top_k: int = 5,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-    ) -> RAGResponse:
-        """
-        질문에 대한 RAG 기반 응답 생성.
-
-        Args:
-            question: 사용자 질문
-            top_k: 검색할 문서 수
-            temperature: LLM 응답 다양성
-            max_tokens: 최대 생성 토큰 수
-
-        Returns:
-            RAGResponse (answer, retrieval_result, model, usage)
-        """
-        # 1. 검색
-        retrieval_result = self._retriever.retrieve(question, top_k=top_k)
-        context = self._retriever.retrieve_with_context(question, top_k=top_k)
-
-        # 2. 프롬프트 생성
-        messages = self._prompt_builder.build(
-            question=question,
-            context=context,
-        )
-
-        # 3. LLM 호출
-        llm_response = self._llm.generate(
-            messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-
-        return RAGResponse(
-            answer=llm_response.content,
-            retrieval_result=retrieval_result,
-            model=llm_response.model,
-            usage=llm_response.usage,
-        )
-
-    def query_with_history(
-        self,
-        question: str,
-        history: Optional[List[Message]] = None,
-        *,
-        top_k: int = 5,
-        temperature: float = 0.7,
-    ) -> RAGResponse:
-        """
-        대화 이력을 포함한 멀티턴 RAG 질의.
-
-        Args:
-            question: 현재 질문
-            history: 이전 대화 이력
-            top_k: 검색할 문서 수
-            temperature: LLM 응답 다양성
-
-        Returns:
-            RAGResponse
-        """
-        # 1. 검색
-        retrieval_result = self._retriever.retrieve(question, top_k=top_k)
-        context = self._retriever.retrieve_with_context(question, top_k=top_k)
-
-        # 2. 프롬프트 생성 (이력 포함)
-        messages = self._prompt_builder.build_with_history(
-            question=question,
-            context=context,
-            history=history,
-        )
-
-        # 3. LLM 호출
-        llm_response = self._llm.generate(messages, temperature=temperature)
-
-        return RAGResponse(
-            answer=llm_response.content,
-            retrieval_result=retrieval_result,
-            model=llm_response.model,
-            usage=llm_response.usage,
-        )
+def get_chroma_store(request: Request) -> ChromaStore:
+    """ChromaStore 의존성 주입."""
+    return request.app.state.deps.chroma_store
 ```
 
-### 2. `src/core/rag/__init__.py` [MODIFY]
+### 3. `src/api/__init__.py` [NEW]
 
 ```python
-# 기존 export에 추가
-from .chain import RAGChain, RAGResponse
+"""
+API Module
+
+FastAPI 애플리케이션 및 의존성 export.
+"""
+
+from .main import app, create_app
+from .deps import AppState, get_app_state, get_rag_chain, get_chroma_store
 ```
 
-### 3. `src/tasktests/phase2/test_rag_chain.py` [NEW]
+### 4. `src/tasktests/phase2/test_api_foundation.py` [NEW]
 
 ```python
-"""RAGChain 단위 테스트"""
+"""FastAPI App Foundation 테스트"""
 
 import pytest
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from core.rag.chain import RAGChain, RAGResponse
-from core.rag.prompt import CONCISE_TEMPLATE
-from core.llm.strategy import FakeLLM
+from fastapi.testclient import TestClient
 
 
-class MockChromaStore:
-    """테스트용 Mock ChromaStore"""
+class TestAppCreation:
+    """앱 생성 테스트"""
 
-    def query(self, query_text, n_results=5, **kwargs):
-        return [
-            {
-                "id": "chunk_1",
-                "text": "RAG는 Retrieval Augmented Generation의 약자입니다.",
-                "metadata": {"source": "rag_intro.md"},
-                "distance": 0.5,
-            },
-            {
-                "id": "chunk_2",
-                "text": "RAG는 검색과 생성을 결합합니다.",
-                "metadata": {"source": "rag_details.md"},
-                "distance": 0.8,
-            },
-        ]
+    def test_create_app_returns_fastapi_instance(self):
+        """create_app()이 FastAPI 인스턴스를 반환하는지 확인"""
+        from api.main import create_app
+        from fastapi import FastAPI
+
+        app = create_app()
+        assert isinstance(app, FastAPI)
+
+    def test_app_has_cors_middleware(self):
+        """CORS 미들웨어가 설정되었는지 확인"""
+        from api.main import create_app
+
+        app = create_app()
+        middleware_names = [m.cls.__name__ for m in app.user_middleware]
+        assert "CORSMiddleware" in middleware_names
 
 
-class TestRAGChain:
-    """RAGChain 기본 테스트"""
+class TestHealthEndpoint:
+    """헬스체크 엔드포인트 테스트"""
 
     @pytest.fixture
-    def chain(self):
-        from core.rag import Retriever
-        store = MockChromaStore()
-        retriever = Retriever(store)
-        llm = FakeLLM(response="This is the answer about RAG.")
-        return RAGChain(retriever=retriever, llm=llm)
+    def client(self):
+        from api.main import create_app
+        app = create_app()
+        # Lifespan을 건너뛰고 테스트용 상태 설정
+        return TestClient(app, raise_server_exceptions=False)
 
-    def test_query_returns_rag_response(self, chain):
-        """query()가 RAGResponse를 반환하는지 확인"""
-        response = chain.query("What is RAG?")
+    def test_health_returns_200(self, client):
+        """GET /health가 200을 반환하는지 확인"""
+        response = client.get("/health")
+        assert response.status_code == 200
 
-        assert isinstance(response, RAGResponse)
-        assert response.answer == "This is the answer about RAG."
-        assert response.model == "fake-llm"
-
-    def test_query_includes_retrieval_result(self, chain):
-        """검색 결과가 포함되는지 확인"""
-        response = chain.query("What is RAG?")
-
-        assert response.retrieval_result is not None
-        assert response.retrieval_result.total_count == 2
-
-    def test_query_with_top_k(self, chain):
-        """top_k 파라미터 동작 확인"""
-        response = chain.query("Test", top_k=1)
-        # MockStore는 항상 2개 반환하므로 실제로는 2개
-        assert response.retrieval_result is not None
-
-    def test_custom_template(self):
-        """커스텀 템플릿 적용 확인"""
-        from core.rag import Retriever
-        store = MockChromaStore()
-        retriever = Retriever(store)
-        llm = FakeLLM()
-
-        chain = RAGChain(
-            retriever=retriever,
-            llm=llm,
-            template=CONCISE_TEMPLATE
-        )
-
-        assert chain.prompt_builder.template.name == "concise"
+    def test_health_returns_healthy_status(self, client):
+        """GET /health가 healthy 상태를 반환하는지 확인"""
+        response = client.get("/health")
+        assert response.json() == {"status": "healthy"}
 
 
-class TestRAGChainWithHistory:
-    """멀티턴 대화 테스트"""
+class TestAppState:
+    """AppState 테스트"""
 
-    @pytest.fixture
-    def chain(self):
-        from core.rag import Retriever
-        store = MockChromaStore()
-        retriever = Retriever(store)
-        llm = FakeLLM(response="Follow-up answer")
-        return RAGChain(retriever=retriever, llm=llm)
+    def test_app_state_dataclass(self):
+        """AppState가 올바른 필드를 가지는지 확인"""
+        from api.deps import AppState
+        import dataclasses
 
-    def test_query_with_history(self, chain):
-        """대화 이력 포함 질의 확인"""
-        history = [
-            {"role": "user", "content": "Hello"},
-            {"role": "assistant", "content": "Hi!"},
-        ]
-        response = chain.query_with_history(
-            question="What is RAG?",
-            history=history
-        )
+        assert dataclasses.is_dataclass(AppState)
+        fields = {f.name for f in dataclasses.fields(AppState)}
+        assert "chroma_store" in fields
+        assert "rag_chain" in fields
 
-        assert response.answer == "Follow-up answer"
+
+class TestDependencyFunctions:
+    """의존성 주입 함수 테스트"""
+
+    def test_get_rag_chain_exists(self):
+        """get_rag_chain 함수가 존재하는지 확인"""
+        from api.deps import get_rag_chain
+        assert callable(get_rag_chain)
+
+    def test_get_chroma_store_exists(self):
+        """get_chroma_store 함수가 존재하는지 확인"""
+        from api.deps import get_chroma_store
+        assert callable(get_chroma_store)
 
 
 if __name__ == "__main__":
@@ -344,29 +349,41 @@ if __name__ == "__main__":
 1. **단위 테스트 실행**
 
    ```bash
-   uv run pytest src/tasktests/phase2/test_rag_chain.py -v
+   uv run pytest src/tasktests/phase2/test_api_foundation.py -v
    ```
 
-2. **전체 Phase 2 테스트**
+2. **임포트 확인**
 
+   ```bash
+   uv run python -c "from src.api import app, create_app; print('Import OK')"
+   ```
+
+3. **전체 Phase 2 테스트** (기존 테스트와의 호환성 확인)
    ```bash
    uv run pytest src/tasktests/phase2/ -v
    ```
 
-3. **임포트 확인**
+### Manual Verification
+
+4. **로컬 서버 실행** (OPENAI_API_KEY 필요)
    ```bash
-   uv run python -c "from src.core.rag import RAGChain, RAGResponse; print('OK')"
+   cd src && uv run uvicorn api.main:app --reload --port 8000
+   ```
+5. **헬스체크 확인**
+   ```bash
+   curl http://localhost:8000/health
+   # 예상 응답: {"status":"healthy"}
    ```
 
 ---
 
 ## 요약
 
-| 항목            | 내용                                        |
-| --------------- | ------------------------------------------- |
-| **신규 파일**   | `src/core/rag/chain.py`                     |
-| **수정 파일**   | `src/core/rag/__init__.py`                  |
-| **테스트 파일** | `src/tasktests/phase2/test_rag_chain.py`    |
-| **핵심 클래스** | `RAGChain`, `RAGResponse`                   |
-| **메서드**      | `query()`, `query_with_history()`           |
-| **의존성**      | `Retriever`, `PromptBuilder`, `LLMStrategy` |
+| 항목            | 내용                                                        |
+| --------------- | ----------------------------------------------------------- |
+| **신규 파일**   | `src/api/main.py`, `src/api/deps.py`, `src/api/__init__.py` |
+| **테스트 파일** | `src/tasktests/phase2/test_api_foundation.py`               |
+| **핵심 클래스** | `AppState`                                                  |
+| **핵심 함수**   | `create_app()`, `init_app_state()`, `lifespan()`            |
+| **의존성 함수** | `get_rag_chain()`, `get_chroma_store()`, `get_app_state()`  |
+| **엔드포인트**  | `GET /health`, `GET /status`                                |

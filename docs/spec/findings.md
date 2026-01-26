@@ -64,6 +64,36 @@
 
 ---
 
+## 2026-01-26: FastAPI App Foundation 구현
+
+### Decisions (기술적 의사결정)
+
+#### 1. 의존성 주입(DI) 패턴: `AppState` + `get_app_state`
+
+- **결정**: 전역 상태를 `AppState` 데이터클래스로 캡슐화하고, `request.app.state.deps`를 통해 접근
+- **이유**:
+  - FastAPI의 `Dependency Injection` 시스템과 호환성 확보
+  - 테스트 시 `app.state.deps`만 교체하면 쉽게 Mocking 가능
+  - 전역 변수 직접 사용 지양으로 모듈 간 결합도 감소
+
+#### 2. Resource 관리: `lifespan` 사용
+
+- **결정**: `@app.on_event("startup")` 대신 `lifespan` 컨텍스트 매니저 사용
+- **이유**:
+  - FastAPI 최신 버전 권장 사항
+  - Startup/Shutdown 로직을 한 곳에서 관리 가능
+  - `yield` 이전(초기화)과 이후(정리)가 명확히 구분됨
+
+#### 3. 모듈 구조 분리 (`main.py` vs `deps.py`)
+
+- **결정**: `main.py`(앱 실행/라우팅)와 `deps.py`(의존성/로직) 분리
+- **이유**:
+  - 순환 참조 방지
+  - `deps.py`만 임포트하여 비즈니스 로직 테스트 가능
+  - 명확한 관심사 분리
+
+---
+
 ## 2026-01-20: 임베딩 모델 통합 (Embedding Model Integration)
 
 ### Decisions (기술적 의사결정)
