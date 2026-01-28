@@ -399,3 +399,47 @@ contents.append(types.Content(
 - 기본 URL: `http://localhost:11434/v1`
 - OpenAI SDK와 완전 호환 (temperature, max_tokens 등 지원)
 - usage 정보도 동일한 형식으로 반환됨
+
+---
+
+## 2026-01-28: API Integration Tests (App Wiring)
+
+### Decisions (기술적 의사결정)
+
+#### 1. Wiring Test의 Mocking 전략
+
+- **결정**: 에서는 외부 의존성(OpenAI, ChromaDB 등)을 모두 Mocking
+- **이유**:
+  - 실제 API 키나 DB 연결 없이 CI 환경에서도 안정적으로 실행 가능
+  - 의 호출 순서와  체인이 정상적으로 연결되었는지만 검증하면 됨
+  - 비즈니스 로직(실제 호출 결과)은 단위 테스트에서 별도로 검증
+
+### Troubleshooting (에러 해결)
+
+#### 1. Configuration Validation Error
+
+- **증상**: 테스트 중  발생
+- **원인**: 에서 Pydantic/Dataclass의 `__post_init__` 검증 시 `Literal` 타입에 정의된 모델명만 허용함
+- **해결**: Mock 설정 시 임의의 테스트 값이 아닌 `text-embedding-3-small`, `gpt-4o-mini` 등 유효한 모델명을 사용
+
+---
+
+## 2026-01-28: API Integration Tests (App Wiring)
+
+### Decisions (기술적 의사결정)
+
+#### 1. Wiring Test의 Mocking 전략
+
+- **결정**: `src/tasktests/phase2/test_wiring.py`에서는 외부 의존성(OpenAI, ChromaDB 등)을 모두 Mocking
+- **이유**:
+  - 실제 API 키나 DB 연결 없이 CI 환경에서도 안정적으로 실행 가능
+  - `Lifespan`의 호출 순서와 `Dependency Injection` 체인이 정상적으로 연결되었는지만 검증하면 됨
+  - 비즈니스 로직(실제 호출 결과)은 단위 테스트에서 별도로 검증
+
+### Troubleshooting (에러 해결)
+
+#### 1. Configuration Validation Error
+
+- **증상**: 테스트 중 `ValueError: Invalid embedding model: text-embedding-3-test` 발생
+- **원인**: `src/config/models.py`에서 Pydantic/Dataclass의 `__post_init__` 검증 시 `Literal` 타입에 정의된 모델명만 허용함
+- **해결**: Mock 설정 시 임의의 테스트 값이 아닌 `text-embedding-3-small`, `gpt-4o-mini` 등 유효한 모델명을 사용

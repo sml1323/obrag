@@ -1,7 +1,7 @@
 # Product Roadmap
 
-> **Last Update**: 2026-01-28 13:55
-> **Current Status**: Sync & Health Endpoints 구현 완료. 다음은 `API Integration Tests` 진행 예정.
+> **Last Update**: 2026-01-28 14:15
+> **Current Status**: `API Integration Tests` 완료 (Wiring & E2E Tests). 다음은 `Phase 2.5: 대화 저장소` 진행 예정.
 > **Note**: API 키 미설정 시 OpenAI/Gemini 테스트 skip 처리됨 (`test_llm_factory.py`)
 
 > 이 로드맵은 프로젝트의 큰 흐름을 정의합니다. 세부 태스크는 각 단계가 진행됨에 따라 동적으로 생성됩니다.
@@ -34,16 +34,19 @@
   - [x] **App Foundation**: FastAPI 앱 설정, CORS, 의존성 주입(DI) 패턴, Lifespan 관리 (`src/api/main.py`, `src/api/deps.py`)
   - [x] **RAG Chat Endpoints**: `/chat` (단일 질의), `/chat/stream` (스트리밍), `/chat/history` (대화 이력 포함) 엔드포인트 (`src/api/routers/chat.py`)
   - [x] **Sync & Health Endpoints**: `/sync/trigger` (증분 동기화 트리거), `/health` (헬스체크), `/status` (DB 상태) (`src/api/routers/sync.py`, `src/api/routers/health.py`)
-  - [/] **API Integration Tests**: 전체 엔드포인트 E2E 테스트 및 Mock 기반 단위 테스트 (`src/tasktests/phase2/test_api_*.py`)
+  - [x] **API Integration Tests**: 전체 엔드포인트 E2E 테스트 및 Mock 기반 단위 테스트 (`src/tasktests/phase2/test_api_*.py`)
 
 ---
 
-## Phase 2.5: 대화 저장소 (Chat Persistence)
+## Phase 2.5: 대화 저장소 및 구조화 (Chat Persistence & Structuring)
 
-- [ ] **SQLite DB 연동**: `sessions`, `messages` 테이블 설계 및 ORM (SQLAlchemy/SQLModel) 설정
-- [ ] **세션 관리**: 대화방(Session) 생성, 조회(목록), 삭제 API
+- [ ] **SQLite DB 연동**: `topics`, `sessions`, `messages` 테이블 설계 및 ORM (SQLAlchemy/SQLModel) 설정
+- [ ] **주제(Topic) 관리**:
+  - 주제(폴더) 생성, 수정, 삭제 API
+  - 주제 내 대화 생성 및 기존 대화 이동(Move) 기능
+- [ ] **세션 관리**: 대화방(Session) 생성, 조회(Topics 필터링 지원), 삭제 API
 - [ ] **대화 저장**: Chat API 호출 시 자동 저장 및 `history` 파라미터 대신 `session_id` 지원
-- [ ] **Frontend 연동 준비**: `GET /sessions` 및 `GET /sessions/{id}/messages` 엔드포인트 구현
+- [ ] **Frontend 연동 준비**: `GET /topics`, `GET /sessions` (by topic), `GET /sessions/{id}/messages` 엔드포인트 구현
 
 ---
 
