@@ -1,7 +1,7 @@
 # Product Roadmap
 
-> **Last Update**: 2026-01-28 15:05
-> **Current Status**: `Phase 2.5: 대화 저장소` 구현 완료. `Chat Persistence` 통합 테스트 통과.
+> **Last Update**: 2026-01-28 16:20
+> **Current Status**: `Phase 2.5: 대화 저장소` 주제(Topic) 기반 대화 생성 및 이동(Move) 기능 구현 완료.
 > **Note**: API 키 미설정 시 OpenAI/Gemini 테스트 skip 처리됨 (`test_llm_factory.py`)
 
 > 이 로드맵은 프로젝트의 큰 흐름을 정의합니다. 세부 태스크는 각 단계가 진행됨에 따라 동적으로 생성됩니다.
@@ -43,7 +43,7 @@
 - [x] **SQLite DB 연동**: `topics`, `sessions`, `messages` 테이블 설계 및 ORM (SQLAlchemy/SQLModel) 설정
 - [/] **주제(Topic) 관리**:
   - [x] 주제(폴더) 생성, 조회, 삭제 API
-  - [ ] 주제 내 대화 생성 및 기존 대화 이동(Move) 기능 (API는 추가됨, Move는 미구현)
+  - [x] 주제 내 대화 생성 및 기존 대화 이동(Move) 기능 (API 및 로직 구현 완료)
 - [/] **세션 관리**: 대화방(Session) 생성, 조회, 삭제 API (기본 CRUD 완료)
 - [x] **대화 저장**: Chat API 호출 시 자동 저장 및 `history` 파라미터 대신 `session_id` 지원
 - [ ] **Frontend 연동 준비**: `GET /topics`, `GET /sessions` (by topic), `GET /sessions/{id}/messages` 엔드포인트 구현

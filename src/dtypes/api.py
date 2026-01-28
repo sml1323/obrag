@@ -12,6 +12,11 @@ from typing import List, Optional
 # Request Models
 # ============================================================================
 
+class SessionUpdate(BaseModel):
+    """세션 정보 수정 요청 (이동 포함)."""
+    title: Optional[str] = Field(default=None, description="세션 제목 변경")
+    topic_id: Optional[int] = Field(default=None, description="이동할 주제 ID (None이면 주제 없음)")
+
 class ChatRequest(BaseModel):
     """채팅 요청 스키마."""
     

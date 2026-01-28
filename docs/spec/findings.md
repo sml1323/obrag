@@ -478,5 +478,37 @@ contents.append(types.Content(
 #### 2. Test TypeError: RetrievalResult.**init**() missing arguments
 
 - **증상**: 테스트 실행 시 `TypeError: RetrievalResult.__init__() missing 2 required positional arguments: 'query' and 'total_count'` 발생
-- **원인**: 테스트 Mock에서 `RetrievalResult` 객체 생성 시 필수 인자 누락
-- **해결**: `RetrievalResult(chunks=[], query="mock", total_count=0)`와 같이 더미 값 전달
+  - `RetrievalResult(chunks=[], query="mock", total_count=0)`와 같이 더미 값 전달
+
+---
+
+## 2026-01-28: Topic-based Chat & Move 구현 (Phase 2.5)
+
+### Decisions (기술적 의사결정)
+
+#### 1. `PATCH` 메서드와 `SessionUpdate` DTO 도입
+
+- **결정**: 세션 수정(주제 이동, 제목 변경)을 위해 `PATCH` 메서드와 `SessionUpdate` (Pydantic BaseModel) 도입.
+- **이유**:
+  - 대화의 모든 정보를 매번 보낼 필요 없이, 변경하고자 하는 필드(`title`, `topic_id`)만 선택적으로 업데이트할 수 있도록 지원.
+  - `model_dump(exclude_unset=True)`를 사용하여 클라이언트가 명시적으로 보낸 값만 필터링하여 반영.
+
+#### 2. Topic ID 유효성 검사 강화
+
+- **결정**: 세션 생성(`POST`) 및 수정(`PATCH`) 시 `topic_id`가 제공된 경우, 해당 토픽이 실제로 DB에 존재하는지 사전 검사 수행.
+- **이유**:
+  - SQLite/SQLModel 수준의 FK 제약 조건에 의존하기 전에 API 레벨에서 404 에러를 반환하여 디버깅 편의성 증대 및 데이터 무결성 보장.
+
+### Troubleshooting (에러 해결)
+
+#### 1. SQLModel 업데이트 패턴
+
+- **증상**: `session.add(obj)`만으로는 필드 변경이 즉시 반영되지 않거나 `refresh` 시점 이슈 발생 가능.
+- **해결**: `setattr(session_obj, key, value)`로 객체 속성을 직접 변경한 뒤 `session.add()` -> `session.commit()` -> `session.refresh()` 순서로 명시적으로 처리하여 상태 동기화 보장.
+
+### Discoveries (외부 지식)
+
+#### Pydantic `exclude_unset` vs `exclude_none`
+
+- `exclude_unset=True`: 클라이언트 요청 본문에 포함되지 않은 필드(기본값 사용 필드 포함)를 딕셔너리에서 제외. `PATCH` 구현 시 필수적.
+- `exclude_none=True`: 값이 `None`인 필드는 모두 제외. 만약 필드를 의도적으로 `None`(예: 주제 해제)으로 만들고 싶을 때는 사용하면 안 됨.
