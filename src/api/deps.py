@@ -22,6 +22,8 @@ from core.embedding import EmbedderFactory
 from core.sync.incremental_syncer import IncrementalSyncer, create_syncer
 from db.chroma_store import ChromaStore
 from config.models import OpenAILLMConfig, OpenAIEmbeddingConfig
+from sqlmodel import Session
+from db.engine import engine
 
 
 # ============================================================================
@@ -109,3 +111,9 @@ def get_chroma_store(request: Request) -> ChromaStore:
 def get_syncer(request: Request) -> IncrementalSyncer:
     """IncrementalSyncer 의존성 주입."""
     return request.app.state.deps.syncer
+
+
+def get_session():
+    """DB Session 의존성 주입."""
+    with Session(engine) as session:
+        yield session

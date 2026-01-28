@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .deps import AppState, init_app_state
+from db.engine import create_db_and_tables
 
 
 # ============================================================================
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         - 리소스 정리
     """
     # Startup
+    create_db_and_tables()
     app.state.deps = init_app_state()
 
     yield
@@ -64,10 +66,13 @@ def create_app() -> FastAPI:
     )
 
     # 라우터 등록
-    from .routers import chat, sync, health
+    # 라우터 등록
+    from .routers import chat, sync, health, topic, session
     app.include_router(chat.router)
     app.include_router(sync.router)
     app.include_router(health.router)
+    app.include_router(topic.router)
+    app.include_router(session.router)
 
     return app
 

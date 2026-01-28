@@ -411,14 +411,14 @@ contents.append(types.Content(
 - **결정**: 에서는 외부 의존성(OpenAI, ChromaDB 등)을 모두 Mocking
 - **이유**:
   - 실제 API 키나 DB 연결 없이 CI 환경에서도 안정적으로 실행 가능
-  - 의 호출 순서와  체인이 정상적으로 연결되었는지만 검증하면 됨
+  - 의 호출 순서와 체인이 정상적으로 연결되었는지만 검증하면 됨
   - 비즈니스 로직(실제 호출 결과)은 단위 테스트에서 별도로 검증
 
 ### Troubleshooting (에러 해결)
 
 #### 1. Configuration Validation Error
 
-- **증상**: 테스트 중  발생
+- **증상**: 테스트 중 발생
 - **원인**: 에서 Pydantic/Dataclass의 `__post_init__` 검증 시 `Literal` 타입에 정의된 모델명만 허용함
 - **해결**: Mock 설정 시 임의의 테스트 값이 아닌 `text-embedding-3-small`, `gpt-4o-mini` 등 유효한 모델명을 사용
 
@@ -443,3 +443,40 @@ contents.append(types.Content(
 - **증상**: 테스트 중 `ValueError: Invalid embedding model: text-embedding-3-test` 발생
 - **원인**: `src/config/models.py`에서 Pydantic/Dataclass의 `__post_init__` 검증 시 `Literal` 타입에 정의된 모델명만 허용함
 - **해결**: Mock 설정 시 임의의 테스트 값이 아닌 `text-embedding-3-small`, `gpt-4o-mini` 등 유효한 모델명을 사용
+
+---
+
+## 2026-01-28: SQLite DB & Chat Persistence (Phase 2.5)
+
+### Decisions (기술적 의사결정)
+
+#### 1. SQLModel 기반 ORM 도입
+
+- **결정**: SQLAlchemy 대신 SQLModel 사용
+- **이유**:
+  - Pydantic 모델과 SQLAlchemy 테이블 정의를 통합하여 코드 중복 제거
+  - FastAPI와의 뛰어난 호환성 (Request Body 및 Response Model로 직접 사용 가능)
+
+#### 2. In-Memory SQLite 테스트 전략 (StaticPool)
+
+- **결정**: `create_engine("sqlite://", poolclass=StaticPool)` 사용
+- **이유**:
+  - 기본적으로 SQLite In-Memory DB는 연결이 닫히면 데이터가 사라짐
+  - `SQLModel.metadata.create_all()`이 연결을 반환하면 테이블이 삭제됨
+  - `StaticPool`을 사용하여 단일 스레드 내에서 연결을 유지해야 함
+
+### Troubleshooting (에러 해결)
+
+#### 1. Test OperationalError: no such table
+
+- **증상**: 테스트에서 `create_all()` 호출 후에도 테이블 없음 에러 발생
+- **원인**: In-Memory DB의 연결 수명 주기 문제 (위 Decisions 참조) 및 모델 임포트 누락
+- **해결**:
+  - 테스트 파일에서 모델(`Topic`, `Session` 등)을 명시적으로 임포트하여 메타데이터에 등록
+  - `StaticPool` 적용으로 DB 수명 연장
+
+#### 2. Test TypeError: RetrievalResult.**init**() missing arguments
+
+- **증상**: 테스트 실행 시 `TypeError: RetrievalResult.__init__() missing 2 required positional arguments: 'query' and 'total_count'` 발생
+- **원인**: 테스트 Mock에서 `RetrievalResult` 객체 생성 시 필수 인자 누락
+- **해결**: `RetrievalResult(chunks=[], query="mock", total_count=0)`와 같이 더미 값 전달

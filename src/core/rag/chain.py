@@ -126,6 +126,7 @@ class RAGChain:
         *,
         top_k: int = 5,
         temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
     ) -> RAGResponse:
         """
         대화 이력을 포함한 멀티턴 RAG 질의.
@@ -135,6 +136,7 @@ class RAGChain:
             history: 이전 대화 이력
             top_k: 검색할 문서 수
             temperature: LLM 응답 다양성
+            max_tokens: 최대 생성 토큰 수
 
         Returns:
             RAGResponse
@@ -151,7 +153,11 @@ class RAGChain:
         )
 
         # 3. LLM 호출
-        llm_response = self._llm.generate(messages, temperature=temperature)
+        llm_response = self._llm.generate(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
 
         return RAGResponse(
             answer=llm_response.content,
@@ -163,6 +169,7 @@ class RAGChain:
     def stream_query(
         self,
         question: str,
+        history: Optional[List[Message]] = None,
         *,
         top_k: int = 5,
         temperature: float = 0.7,
@@ -179,10 +186,17 @@ class RAGChain:
         context = self._retriever.retrieve_with_context(question, top_k=top_k)
 
         # 2. 프롬프트 생성
-        messages = self._prompt_builder.build(
-            question=question,
-            context=context,
-        )
+        if history:
+            messages = self._prompt_builder.build_with_history(
+                question=question,
+                context=context,
+                history=history,
+            )
+        else:
+            messages = self._prompt_builder.build(
+                question=question,
+                context=context,
+            )
 
         # 3. 스트리밍 LLM 호출
         generator = self._llm.stream_generate(

@@ -10,8 +10,10 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from api.deps import get_rag_chain
+from api.deps import get_rag_chain, get_session
+from core.domain.chat import Session, Message, Topic
 from core.rag import RAGChain
+from sqlmodel import Session as DBSession
 from dtypes.api import (
     ChatRequest,
     ChatHistoryRequest,
@@ -39,6 +41,30 @@ def _convert_retrieval_to_sources(retrieval_result) -> list[SourceChunk]:
     ]
 
 
+def _get_or_create_session(db: DBSession, session_id: str):
+    session = db.get(Session, session_id)
+    if not session:
+        session = Session(id=session_id, title=f"Chat {session_id[:8]}")
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+    return session
+
+
+def _load_history(db: DBSession, session_id: str) -> list[dict]:
+    session = db.get(Session, session_id)
+    if not session:
+        return []
+    messages = sorted(session.messages, key=lambda m: m.created_at)
+    return [{"role": m.role, "content": m.content} for m in messages]
+
+
+def _save_message(db: DBSession, session_id: str, role: str, content: str):
+    msg = Message(session_id=session_id, role=role, content=content)
+    db.add(msg)
+    db.commit()
+
+
 # ============================================================================
 # Endpoints
 # ============================================================================
@@ -47,18 +73,37 @@ def _convert_retrieval_to_sources(retrieval_result) -> list[SourceChunk]:
 async def chat(
     request: ChatRequest,
     chain: RAGChain = Depends(get_rag_chain),
+    db: DBSession = Depends(get_session),
 ) -> ChatResponse:
     """
     단일 질의 RAG 응답.
     
     동기 방식으로 전체 응답을 한 번에 반환합니다.
     """
-    response = chain.query(
-        request.question,
-        top_k=request.top_k,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
-    )
+    history = []
+    if request.session_id:
+        _get_or_create_session(db, request.session_id)
+        history = _load_history(db, request.session_id)
+        _save_message(db, request.session_id, "user", request.question)
+
+    if history:
+        response = chain.query_with_history(
+            request.question,
+            history=history,
+            top_k=request.top_k,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+        )
+    else:
+        response = chain.query(
+            request.question,
+            top_k=request.top_k,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+        )
+    
+    if request.session_id:
+        _save_message(db, request.session_id, "assistant", response.answer)
     
     return ChatResponse(
         answer=response.answer,
@@ -72,6 +117,7 @@ async def chat(
 async def chat_stream(
     request: ChatRequest,
     chain: RAGChain = Depends(get_rag_chain),
+    db: DBSession = Depends(get_session),
 ) -> StreamingResponse:
     """
     SSE 스트리밍 응답.
@@ -79,8 +125,15 @@ async def chat_stream(
     Server-Sent Events 형식으로 실시간 응답을 스트리밍합니다.
     첫 번째 이벤트에서 sources 정보를, 이후 이벤트에서 응답 텍스트를 전송합니다.
     """
+    history = []
+    if request.session_id:
+        _get_or_create_session(db, request.session_id)
+        history = _load_history(db, request.session_id)
+        _save_message(db, request.session_id, "user", request.question)
+
     retrieval_result, generator = chain.stream_query(
         request.question,
+        history=history if history else None,
         top_k=request.top_k,
         temperature=request.temperature,
         max_tokens=request.max_tokens,
@@ -97,13 +150,18 @@ async def chat_stream(
         }
         yield f"data: {json.dumps(start_data)}\n\n"
         
+        full_content = []
         # 텍스트 청크 스트리밍
         for chunk in generator:
+            full_content.append(chunk)
             chunk_data = {"type": "content", "content": chunk}
             yield f"data: {json.dumps(chunk_data)}\n\n"
         
         # 완료 이벤트
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        
+        if request.session_id:
+            _save_message(db, request.session_id, "assistant", "".join(full_content))
     
     return StreamingResponse(
         event_generator(),

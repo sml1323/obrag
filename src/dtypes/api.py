@@ -16,6 +16,7 @@ class ChatRequest(BaseModel):
     """채팅 요청 스키마."""
     
     question: str = Field(..., min_length=1, description="질문 내용")
+    session_id: Optional[str] = Field(default=None, description="대화 세션 ID (UUID v4)")
     top_k: int = Field(default=5, ge=1, le=20, description="검색할 문서 수")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="응답 다양성")
     max_tokens: Optional[int] = Field(default=None, ge=1, description="최대 토큰 수")
