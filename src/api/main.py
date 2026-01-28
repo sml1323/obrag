@@ -63,25 +63,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Health check 엔드포인트
-    @app.get("/health")
-    async def health_check():
-        return {"status": "healthy"}
-
-    @app.get("/status")
-    async def get_status():
-        """앱 상태 및 DB 정보 반환."""
-        deps = app.state.deps
-        if deps and deps.chroma_store:
-            return {
-                "status": "ready",
-                "db": deps.chroma_store.get_stats(),
-            }
-        return {"status": "initializing"}
-
     # 라우터 등록
-    from .routers import chat
+    from .routers import chat, sync, health
     app.include_router(chat.router)
+    app.include_router(sync.router)
+    app.include_router(health.router)
 
     return app
 

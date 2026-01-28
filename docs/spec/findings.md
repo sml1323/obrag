@@ -4,6 +4,34 @@
 
 ---
 
+---
+
+## 2026-01-28: Sync & Health Endpoints 구현
+
+### Decisions (기술적 의사결정)
+
+#### 1. Router 분리 및 Health Check 전용 모듈
+
+- **결정**: `src/api/routers/health.py`와 `sync.py`로 기능 분리
+- **이유**:
+  - `main.py`는 앱 구동과 라우터 등록에만 집중
+  - Liveness/Readiness Probe 로직이 복잡해질 경우 별도 관리 용이
+
+#### 2. Blocking I/O 작업을 위한 `def` 라우터 사용
+
+- **결정**: `/sync/trigger` 엔드포인트는 `async def`가 아닌 일반 `def`로 정의
+- **이유**:
+  - `IncrementalSyncer.sync()`는 파일 I/O를 포함하는 동기 함수
+  - `def`로 정의해야 FastAPI가 별도 스레드풀(Threadpool)에서 실행하여 이벤트 루프 차단 방지
+
+### Troubleshooting (에러 해결)
+
+#### 1. Pytest 모듈 경로 문제
+
+- **증상**: `ModuleNotFoundError: No module named 'api'`
+- **원인**: 테스트 코드 실행 시 `src` 디렉토리가 파이썬 경로에 포함되지 않음
+- **해결**: `PYTHONPATH=src pytest ...` 명령어로 실행 경로 명시
+
 ## 2026-01-26: RAG Chat Endpoints 구현
 
 ### Decisions (기술적 의사결정)

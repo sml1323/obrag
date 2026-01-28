@@ -19,6 +19,7 @@ from fastapi import Request
 from core.rag import RAGChain, Retriever
 from core.llm import LLMFactory
 from core.embedding import EmbedderFactory
+from core.sync.incremental_syncer import IncrementalSyncer, create_syncer
 from db.chroma_store import ChromaStore
 from config.models import OpenAILLMConfig, OpenAIEmbeddingConfig
 
@@ -33,6 +34,7 @@ class AppState:
 
     chroma_store: ChromaStore
     rag_chain: RAGChain
+    syncer: IncrementalSyncer
 
 
 def init_app_state(
@@ -74,9 +76,14 @@ def init_app_state(
     retriever = Retriever(chroma_store)
     rag_chain = RAGChain(retriever=retriever, llm=llm)
 
+    # 5. IncrementalSyncer 생성
+    obsidian_path = os.getenv("OBSIDIAN_PATH", "./docs")
+    syncer = create_syncer(root_path=obsidian_path, chroma_store=chroma_store)
+
     return AppState(
         chroma_store=chroma_store,
         rag_chain=rag_chain,
+        syncer=syncer,
     )
 
 
@@ -97,3 +104,8 @@ def get_rag_chain(request: Request) -> RAGChain:
 def get_chroma_store(request: Request) -> ChromaStore:
     """ChromaStore 의존성 주입."""
     return request.app.state.deps.chroma_store
+
+
+def get_syncer(request: Request) -> IncrementalSyncer:
+    """IncrementalSyncer 의존성 주입."""
+    return request.app.state.deps.syncer

@@ -1,253 +1,128 @@
-# RAG Chat Endpoints 구현 계획
+# Sync & Health Endpoints 구현 계획
 
-> **Target Task**: Phase 2 - FastAPI 백엔드 > RAG Chat Endpoints
-> **Target Path**: `src/api/routers/chat.py`
+> **Target Task**: Phase 2 - FastAPI 백엔드 > Sync & Health Endpoints
+> **Target Path**: `src/api/routers/`
 
 ## 목표
 
-RAG 기반 질의응답 엔드포인트를 구현합니다:
-
-- `/chat`: 단일 질의 (동기)
-- `/chat/stream`: 스트리밍 응답 (SSE)
-- `/chat/history`: 대화 이력 포함 멀티턴
+- **증분 동기화 API**: 클라이언트 요청으로 파일 변경 사항을 감지하고 Vector DB에 반영하는 `/sync/trigger` 엔드포인트 구현
+- **상태 모니터링**: 서버 상태와 DB 정보를 확인할 수 있는 `/health`, `/status` 엔드포인트 구현
+- **의존성 주입**: `IncrementalSyncer`를 API 계층에서 사용할 수 있도록 `AppState`에 통합
 
 ---
 
 ## 기존 패턴 분석
 
-### 1. DI 패턴 (`deps.py`)
-
-- `AppState` 데이터클래스로 전역 상태 캡슐화
-- `get_rag_chain()` 의존성 함수로 `RAGChain` 주입
-- `request.app.state.deps`를 통한 접근
-
-### 2. RAGChain 인터페이스 (`chain.py`)
-
-```python
-# 이미 구현됨
-chain.query(question, top_k=5, temperature=0.7) -> RAGResponse
-chain.query_with_history(question, history, top_k=5) -> RAGResponse
-```
-
-### 3. LLMStrategy 현황 (`strategy.py`)
-
-- `generate()` 메서드만 존재 (동기)
-- **스트리밍 메서드 없음** → 추가 필요
+- **Router**: `src/api/routers/chat.py`와 같이 기능별 Router 분리 (`APIRouter` 사용)
+- **Dependency**: `src/api/deps.py`의 `AppState`를 통해 Singleton 객체(`ChromaStore`, `RAGChain`) 관리
+- **Sync Logic**: `src/core/sync/incremental_syncer.py`에 이미 구현되어 있으며 `create_syncer` 헬퍼 함수 존재
 
 ---
 
 ## 제안하는 구조
 
-```
-src/api/
-├── routers/           [NEW] 라우터 디렉토리
-│   ├── __init__.py    [NEW]
-│   └── chat.py        [NEW] 채팅 엔드포인트
-├── main.py            [MODIFY] 라우터 등록
-└── deps.py            (변경 없음)
+### App State 확장 (`src/api/deps.py`)
 
-src/core/llm/
-├── strategy.py        [MODIFY] stream_generate() 추가
-├── openai_llm.py      [MODIFY] 스트리밍 구현
-├── gemini_llm.py      [MODIFY] 스트리밍 구현
-└── ollama_llm.py      [MODIFY] 스트리밍 구현
+- `AppState`에 `syncer: IncrementalSyncer` 필드 추가
+- `init_app_state`에서 `OBSIDIAN_PATH` 환경변수를 읽어 `create_syncer`로 초기화
+- `get_syncer` 의존성 함수 추가
 
-src/core/rag/
-└── chain.py           [MODIFY] stream_query() 추가
+### New Routers
 
-src/dtypes/
-└── api.py             [NEW] API 요청/응답 스키마
-```
+#### [NEW] `src/api/routers/sync.py`
+
+- `POST /sync/trigger`
+  - 동기적 작업이므로 `run_in_threadpool` 또는 일반 `def` 라우터로 정의 (FastAPI가 스레드풀에서 실행)
+  - `IncrementalSyncer.sync()` 호출
+  - 결과로 `SyncResult` 반환
+
+#### [NEW] `src/api/routers/health.py`
+
+- `GET /health`
+  - 단순 200 OK 반환 (Liveness Probe용)
+- `GET /status`
+  - DB 상태(문서 수 등)와 마지막 동기화 시간 등 반환
+
+### Router Registration (`src/api/main.py`)
+
+- `sync`, `health` 라우터 등록
 
 ---
 
 ## 파일별 상세 계획
 
-### 1. `src/dtypes/api.py` [NEW]
-
-API 요청/응답 Pydantic 모델 정의.
+### 1. `src/api/deps.py` [MODIFY]
 
 ```python
-from pydantic import BaseModel
-from typing import List, Optional
+# .env 로드 부분에 OBSIDIAN_PATH 추가
+# AppState 클래스에 syncer 필드 추가
+@dataclass
+class AppState:
+    ...
+    syncer: IncrementalSyncer
 
-class ChatRequest(BaseModel):
-    """채팅 요청 스키마"""
-    question: str
-    top_k: int = 5
-    temperature: float = 0.7
-    max_tokens: Optional[int] = None
+# init_app_state 함수 수정
+def init_app_state(...) -> AppState:
+    ...
+    # 5. IncrementalSyncer 생성
+    obsidian_path = os.getenv("OBSIDIAN_PATH", "./docs") # 기본값 설정
+    syncer = create_syncer(root_path=obsidian_path, chroma_store=chroma_store)
 
-class ChatHistoryRequest(ChatRequest):
-    """대화 이력 포함 채팅 요청"""
-    history: List[dict] = []  # [{"role": "user/assistant", "content": "..."}]
+    return AppState(..., syncer=syncer)
 
-class SourceChunk(BaseModel):
-    """근거 문서 정보"""
-    content: str
-    source: str
-    score: float
-
-class ChatResponse(BaseModel):
-    """채팅 응답 스키마"""
-    answer: str
-    sources: List[SourceChunk]
-    model: str
-    usage: dict
-
-class StreamChunk(BaseModel):
-    """스트리밍 청크"""
-    content: str
-    done: bool = False
+# get_syncer 함수 추가
+def get_syncer(request: Request) -> IncrementalSyncer:
+    return request.app.state.deps.syncer
 ```
 
----
-
-### 2. `src/core/llm/strategy.py` [MODIFY]
-
-스트리밍 메서드를 Protocol에 추가.
-
-```python
-from typing import Iterator, AsyncIterator
-
-class LLMStrategy(Protocol):
-    # 기존 generate() 유지
-
-    def stream_generate(
-        self,
-        messages: List[Message],
-        *,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-    ) -> Iterator[str]:
-        """스트리밍 응답 생성 (Generator)"""
-        ...
-```
-
----
-
-### 3. `src/core/llm/openai_llm.py` [MODIFY]
-
-OpenAI 스트리밍 구현.
-
-```python
-def stream_generate(
-    self,
-    messages: List[Message],
-    *,
-    temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
-) -> Iterator[str]:
-    response = self._client.chat.completions.create(
-        model=self._model_name,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        stream=True,  # 스트리밍 활성화
-    )
-    for chunk in response:
-        if chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
-```
-
----
-
-### 4. `src/core/rag/chain.py` [MODIFY]
-
-스트리밍 query 메서드 추가.
-
-```python
-def stream_query(
-    self,
-    question: str,
-    *,
-    top_k: int = 5,
-    temperature: float = 0.7,
-) -> tuple[RetrievalResult, Iterator[str]]:
-    """스트리밍 RAG 응답 생성.
-
-    Returns:
-        (retrieval_result, content_generator)
-    """
-    retrieval_result = self._retriever.retrieve(question, top_k=top_k)
-    context = self._retriever.retrieve_with_context(question, top_k=top_k)
-    messages = self._prompt_builder.build(question=question, context=context)
-
-    return retrieval_result, self._llm.stream_generate(messages, temperature=temperature)
-```
-
----
-
-### 5. `src/api/routers/chat.py` [NEW]
-
-채팅 엔드포인트 구현.
+### 2. `src/api/routers/sync.py` [NEW]
 
 ```python
 from fastapi import APIRouter, Depends
-from fastapi.responses import StreamingResponse
-from api.deps import get_rag_chain
-from core.rag import RAGChain
-from dtypes.api import ChatRequest, ChatHistoryRequest, ChatResponse
+from api.deps import get_sync_registry, get_syncer # Registry는 필요시 추가
+from core.sync.incremental_syncer import IncrementalSyncer, SyncResult
 
-router = APIRouter(prefix="/chat", tags=["chat"])
+router = APIRouter(prefix="/sync", tags=["sync"])
 
-@router.post("", response_model=ChatResponse)
-async def chat(request: ChatRequest, chain: RAGChain = Depends(get_rag_chain)):
-    """단일 질의 RAG 응답"""
-    response = chain.query(
-        request.question,
-        top_k=request.top_k,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
-    )
-    return ChatResponse(
-        answer=response.answer,
-        sources=[...],  # retrieval_result 변환
-        model=response.model,
-        usage=response.usage,
-    )
-
-@router.post("/stream")
-async def chat_stream(request: ChatRequest, chain: RAGChain = Depends(get_rag_chain)):
-    """SSE 스트리밍 응답"""
-    retrieval_result, generator = chain.stream_query(...)
-
-    async def event_generator():
-        for chunk in generator:
-            yield f"data: {chunk}\n\n"
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-@router.post("/history", response_model=ChatResponse)
-async def chat_with_history(request: ChatHistoryRequest, chain: RAGChain = Depends(get_rag_chain)):
-    """대화 이력 포함 멀티턴"""
-    response = chain.query_with_history(
-        request.question,
-        history=request.history,
-        top_k=request.top_k,
-        temperature=request.temperature,
-    )
-    return ChatResponse(...)
+@router.post("/trigger", response_model=SyncResult)
+def trigger_sync(syncer: IncrementalSyncer = Depends(get_syncer)):
+    """증분 동기화 트리거"""
+    return syncer.sync()
 ```
 
----
-
-### 6. `src/api/main.py` [MODIFY]
-
-라우터 등록.
+### 3. `src/api/routers/health.py` [NEW]
 
 ```python
-from .routers import chat
+from fastapi import APIRouter, Depends
+from api.deps import get_chroma_store
+from db.chroma_store import ChromaStore
 
-def create_app() -> FastAPI:
-    app = FastAPI(...)
+router = APIRouter(tags=["health"])
 
-    # 라우터 등록
-    app.include_router(chat.router)
+@router.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
-    return app
+@router.get("/status")
+async def get_status(store: ChromaStore = Depends(get_chroma_store)):
+    # ChromaStore 구현에 따라 get_stats() 활용 (main.py의 기존 로직 이동)
+    return {
+        "status": "ready",
+        "db": store.get_stats(),
+    }
 ```
+
+### 4. `src/api/main.py` [MODIFY]
+
+- 기존 `@app.get("/health")`, `@app.get("/status")` 제거 (health 라우터로 이동)
+- `app.include_router(sync.router)`
+- `app.include_router(health.router)`
+
+### 5. `src/tasktests/phase2/test_api_sync.py` [NEW]
+
+- `/sync/trigger` 호출 테스트
+- `Mock(IncrementalSyncer)`를 주입하여 실제 파일 스캔 없이 동작 확인
+- `/health`, `/status` 응답 확인
 
 ---
 
@@ -255,41 +130,24 @@ def create_app() -> FastAPI:
 
 ### Automated Tests
 
-테스트 파일: `src/tasktests/phase2/test_api_chat.py`
+1. **단위 테스트 실행**:
+   ```bash
+   pytest src/tasktests/phase2/test_api_sync.py -v
+   ```
 
-```bash
-# 전체 테스트 실행
-cd /Users/imseungmin/work/portfolio/obsidian_RAG/obrag
-python -m pytest src/tasktests/phase2/test_api_chat.py -v
-```
+### Manual Verification
 
-**테스트 항목:**
-
-1. **엔드포인트 존재 확인**
-   - `POST /chat` 라우트 존재
-   - `POST /chat/stream` 라우트 존재
-   - `POST /chat/history` 라우트 존재
-
-2. **정상 응답 테스트 (FakeLLM 사용)**
-   - `/chat` → `ChatResponse` 형식 반환
-   - `/chat/history` → 이력 포함 응답
-
-3. **스트리밍 테스트**
-   - `/chat/stream` → `text/event-stream` Content-Type
-   - SSE 형식 (`data: ...`) 확인
-
-4. **입력 검증**
-   - 빈 question → 422 에러
-   - 잘못된 temperature 범위 → 검증 에러
+1. **서버 실행**: `uvicorn src.api.main:app --reload`
+2. **Docs 확인**: `http://localhost:8000/docs` 접속
+3. **Sync Trigger**: Swagger UI에서 `/sync/trigger` 실행 후 결과 확인
 
 ---
 
 ## 요약
 
-| 항목           | 내용                                                                                    |
-| -------------- | --------------------------------------------------------------------------------------- |
-| **새 파일**    | `routers/__init__.py`, `routers/chat.py`, `dtypes/api.py`, `test_api_chat.py`           |
-| **수정 파일**  | `strategy.py`, `openai_llm.py`, `gemini_llm.py`, `ollama_llm.py`, `chain.py`, `main.py` |
-| **엔드포인트** | `POST /chat`, `POST /chat/stream`, `POST /chat/history`                                 |
-| **의존성**     | `pydantic` (이미 FastAPI에 포함)                                                        |
-| **테스트**     | `test_api_chat.py` (단위 + Mock 기반)                                                   |
+| 구분              | 내용                                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| **New Files**     | `src/api/routers/sync.py`, `src/api/routers/health.py`, `src/tasktests/phase2/test_api_sync.py` |
+| **Modified**      | `src/api/deps.py`, `src/api/main.py`                                                            |
+| **Dependencies**  | `IncrementalSyncer` (Core)                                                                      |
+| **Test Coverage** | API Endpoint Mock Test                                                                          |
