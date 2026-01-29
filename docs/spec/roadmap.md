@@ -1,7 +1,7 @@
 # Product Roadmap
 
-> **Last Update**: 2026-01-29 11:47
-> **Current Status**: `Phase 2.5: 대화 저장소` 세션 목록/상세/삭제 API 및 메시지 조회 API 구현 완료 (Frontend 연동 준비됨).
+> **Last Update**: 2026-01-29 16:30
+> **Current Status**: `Phase 3: PARA 대시보드` 프로젝트 API (CRUD, Stale Logic) 구현 완료. Frontend 대시보드 구현 준비됨.
 > **Note**: API 키 미설정 시 OpenAI/Gemini 테스트 skip 처리됨 (`test_llm_factory.py`)
 
 > 이 로드맵은 프로젝트의 큰 흐름을 정의합니다. 세부 태스크는 각 단계가 진행됨에 따라 동적으로 생성됩니다.
@@ -54,10 +54,10 @@
 
 - [ ] **프로젝트 관리 & 메타데이터 (Backend Core)**: 사용자 지정 프로젝트 폴더 관리 및 동기화
   - [x] **Data Layer**: Project 테이블 Schema 정의 (SQLModel) 및 CRUD (`src/core/domain/project.py`)
-  - [ ] **Scanner Module**: 등록된 프로젝트 폴더 탐색, 메타데이터(수정일) 추출, DB Sync 로직 (`src/core/project/scanner.py`)
+  - [x] **Scanner Module**: 등록된 프로젝트 폴더 탐색, 메타데이터(수정일) 추출, DB Sync 로직 (`src/core/project/scanner.py`)
 - [ ] **API & 비즈니스 로직 (Backend API)**:
-  - [ ] **Stale Logic**: 유기 프로젝트(30일 미수정) 판별 및 진척도 계산 로직
-  - [ ] **API Endpoints**: `/projects` (목록/필터), `/projects/{id}` 구현 (`src/api/routers/project.py`)
+  - [x] **Stale Logic**: 유기 프로젝트(30일 미수정) 판별 및 진척도 계산 로직
+  - [x] **API Endpoints**: `/projects` (목록/필터), `/projects/{id}` 구현 (`src/api/routers/project.py`)
 - [ ] **Frontend UI (Dashboard)**:
   - [ ] **Dashboard Page**: 전체 프로젝트 리스트 및 상태별 필터링 UI
   - [ ] **Project Card**: 프로젝트별 요약 정보 및 Stale 경고 시각화

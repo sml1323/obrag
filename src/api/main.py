@@ -67,12 +67,13 @@ def create_app() -> FastAPI:
 
     # 라우터 등록
     # 라우터 등록
-    from .routers import chat, sync, health, topic, session
+    from .routers import chat, sync, health, topic, session, project
     app.include_router(chat.router)
     app.include_router(sync.router)
     app.include_router(health.router)
     app.include_router(topic.router)
     app.include_router(session.router)
+    app.include_router(project.router)
 
     return app
 

@@ -531,3 +531,37 @@ contents.append(types.Content(
 
 - `exclude_unset=True`: 클라이언트 요청 본문에 포함되지 않은 필드(기본값 사용 필드 포함)를 딕셔너리에서 제외. `PATCH` 구현 시 필수적.
 - `exclude_none=True`: 값이 `None`인 필드는 모두 제외. 만약 필드를 의도적으로 `None`(예: 주제 해제)으로 만들고 싶을 때는 사용하면 안 됨.
+
+---
+
+## 2026-01-29: Project API & Stale Logic 구현 (Phase 3)
+
+### Decisions (기술적 의사결정)
+
+#### 1. 유기(Stale) 프로젝트 판단 로직
+
+- **결정**: 마지막 수정일(last_modified_at)로부터 30일 경과 시 Stale로 판단
+- **이유**: 한 달간 수정되지 않은 지식은 검토가 필요하다는 가설. API 응답 시 `is_stale` (bool)과 `days_inactive` (int) 필드를 계산하여 반환.
+
+#### 2. Scanner 대상 Refinement
+
+- **결정**: `ProjectScanner`의 탐색 대상을 `.md` 파일로 한정
+- **이유**: `.DS_Store`나 기타 시스템 파일의 변경이 지식의 최신성을 대변하지 않음. 오직 마크다운 파일의 변경만을 지식 활동으로 간주.
+
+#### 3. API Router 의존성 주입 (Depends)
+
+- **결정**: `src/api/routers/project.py`에서 `SessionDep` 대신 `Depends(get_session)` 직접 사용
+- **이유**: `api.deps` 모듈 임포트 시 순환 참조 또는 모듈 로딩 순서 문제로 `ImportError` 발생. 명시적 `Depends` 사용으로 해결.
+
+### Troubleshooting (에러 해결)
+
+#### 1. Timezone Naive vs Aware 에러
+
+- **증상**: `TypeError: can't subtract offset-naive and offset-aware datetimes`
+- **원인**: `Project.last_modified_at`은 timezone-aware(UTC)인 반면, 테스트 코드나 로직에서 `datetime.now()` (naive)를 사용
+- **해결**: 모든 날짜 관련 로직과 테스트 데이터 생성 시 `datetime.now(timezone.utc)`를 사용하여 UTC timezone-aware 객체로 통일.
+
+#### 2. Test File Imports Missing
+
+- **증상**: 리팩토링 중 `pytest`, `Path`, `TestClient` 등 필수 임포트 누락으로 `NameError` 발생
+- **해결**: 누락된 임포트 구문 복구.
