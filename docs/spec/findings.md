@@ -6,6 +6,25 @@
 
 ---
 
+## 2026-01-29: Session API (Frontend Integration)
+
+### Decisions (기술적 의사결정)
+
+#### 1. Manual Cascade Delete for Sessions
+
+- **결정**: `DELETE /sessions/{id}` 구현 시 DB 레벨 Cascade 없이 수동으로 메시지 먼저 삭제 후 세션 삭제
+- **이유**:
+  - 현재 SQLModel `Relationship`에 `cascade="all, delete"` 옵션이 명시적으로 설정되지 않음
+  - 안전성을 위해 Application Level에서 자식(Messages) -> 부모(Session) 순서로 명시적 삭제 보장
+  - 추후 DB Schema 변경 없이 로직만으로 데이터 정합성 유지 가능
+
+#### 2. Test Client with StaticPool
+
+- **결정**: `test_session_api.py`에서 `StaticPool` + `dependency_overrides` 패턴 재확인 및 사용
+- **이유**:
+  - In-Memory SQLite 테스트의 격리성과 안정성 확보 확인됨
+  - `conftest.py` 없이 각 테스트 파일별 독립적 Fixture 구성 유지 (파일 단위 실행 편의성)
+
 ## 2026-01-28: Sync & Health Endpoints 구현
 
 ### Decisions (기술적 의사결정)

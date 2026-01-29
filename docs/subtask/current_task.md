@@ -1,74 +1,83 @@
-# [Phase 2.5] 주제(Topic) 기반 대화 생성 및 이동(Move) 구현 계획
+# Frontend 연동 API 구현 계획
 
-> **Target Task**: Phase 2.5 - 주제 내 대화 생성 및 기존 대화 이동(Move) 기능
-> **Target Path**: `src/api`, `src/dtypes`
+> **Target Task**: Phase 2.5 - Frontend 연동 준비 (Frontend Integration Preparation)
+> **Target Path**: `src/api/routers/session.py`
 
 ## 목표
 
-- 대화 세션 생성 시 특정 주제(`topic_id`)를 지정할 수 있도록 지원
-- 기존 대화 세션을 다른 주제로 이동하거나, 주제에서 제거하는 기능(Move) 구현
-- 잘못된 `topic_id`에 대한 유효성 검사 추가
+Frontend 개발에 필요한 Session 및 Message 관련 조회/삭제 API를 구현합니다.
+기존 Chat API는 대화 생성에 초점을 맞췄다면, 이번 작업은 저장된 대화 기록을 관리하고 조회하는 기능을 제공합니다.
 
 ---
 
 ## 기존 패턴 분석
 
-- **Domain Model**: `core.domain.chat.Session` 모델은 이미 `topic_id` 필드를 가지고 있음.
-- **API Pattern**: `src/api/routers/session.py`는 `Session` 객체를 직접 받아 생성하지만, `topic_id` 유효성 검증 로직은 부재함.
-- **DTO**: `src/dtypes/api.py`에는 `ChatRequest` 등 요청 모델이 있으나, Session Update를 위한 모델은 없음.
+- `src/api/routers/topic.py`: `GET`, `POST`, `DELETE` 패턴이 이미 구현되어 있음.
+- `src/api/routers/session.py`: 현재 `POST` (생성), `PATCH` (수정), `POST .../messages` (메시지 추가)만 존재.
+- `src/core/domain/chat.py`: SQLModel 기반 `Session`, `Message` 모델 정의됨.
 
 ---
 
 ## 제안하는 구조
 
-### 1. DTO 추가 (`src/dtypes/api.py`)
+### `src/api/routers/session.py`
 
-- `SessionUpdate` 클래스 추가 (Pydantic BaseModel)
-  - `topic_id`: `Optional[int]` (Nullable 허용하여 주제 해제 지원)
-  - `title`: `Optional[str]` (제목 변경도 같이 지원하면 유용함)
+기존 파일에 다음 엔드포인트를 추가합니다.
 
-### 2. API 엔드포인트 확장 (`src/api/routers/session.py`)
+1.  **`GET /sessions`**
+    - Query Parameter: `topic_id: Optional[int]`
+    - 반환: `List[Session]` (기본적으로 최신순 정렬)
+    - 역할: 전체 세션 목록 또는 특정 주제의 세션 목록 조회
 
-- **Move (Update)**: `PATCH /sessions/{session_id}`
-  - `SessionUpdate` 스키마 사용
-  - `topic_id` 변경 시 해당 Topic 존재 여부 검증 (FK 오류 방지)
-- **Create**: `POST /sessions` (기존 수정)
-  - `topic_id`가 입력된 경우, 해당 Topic 존재 여부 사전 검증 추가
+2.  **`GET /sessions/{session_id}`**
+    - 반환: `Session`
+    - 역할: 세션 상세 정보 조회
+
+3.  **`DELETE /sessions/{session_id}`**
+    - 역할: 세션 삭제 (Cascade 설정에 따라 하위 메시지도 삭제되는지 확인 필요, 현재 SQLModel 정의상 DB 레벨 Cascade 없으면 수동 삭제 필요할 수 있음. _Note: SQLModel Relationship에 `sa_relationship_kwargs={"cascade": "all, delete"}` 추가 고려 혹은 수동 삭제 로직 추가_)
+    - 일단 Service 로직에서 Message 먼저 삭제 후 Session 삭제하는 안전한 방식 적용.
+
+4.  **`GET /sessions/{session_id}/messages`**
+    - 반환: `List[Message]` (생성일 오름차순)
+    - 역할: 채팅방 입장 시 이전 대화 내용 로드
 
 ---
 
 ## 파일별 상세 계획
 
-### `src/dtypes/api.py`
+### [MODIFY] `src/api/routers/session.py`
 
 ```python
-class SessionUpdate(BaseModel):
-    """세션 정보 수정 요청 (이동 포함)."""
-    title: Optional[str] = Field(default=None, description="세션 제목 변경")
-    topic_id: Optional[int] = Field(default=None, description="이동할 주제 ID (None이면 주제 없음)")
+# GET /sessions
+@router.get("", response_model=List[ChatSession])
+def read_sessions(
+    topic_id: Optional[int] = None,
+    offset: int = 0,
+    limit: int = 100,
+    session: Session = Depends(get_session)
+):
+    # query construction with topic_id filter
+    # order by created_at desc
+    pass
+
+# GET /sessions/{session_id}
+@router.get("/{session_id}", response_model=ChatSession)
+def read_session(session_id: str, session: Session = Depends(get_session)):
+    pass
+
+# DELETE /sessions/{session_id}
+@router.delete("/{session_id}")
+def delete_session(session_id: str, session: Session = Depends(get_session)):
+    # Delete associated messages first (if no DB cascade)
+    # Delete session
+    pass
+
+# GET /sessions/{session_id}/messages
+@router.get("/{session_id}/messages", response_model=List[Message])
+def read_session_messages(session_id: str, session: Session = Depends(get_session)):
+    # order by created_at asc
+    pass
 ```
-
-### `src/api/routers/session.py`
-
-1. **`create_session` 수정**:
-
-   ```python
-   def create_session(..., session: Session = Depends(get_session)):
-       if chat_session.topic_id is not None:
-           # Topic 존재 확인
-           # ...
-       # ...
-   ```
-
-2. **`update_session` 추가**:
-   ```python
-   @router.patch("/{session_id}", response_model=ChatSession)
-   def update_session(session_id: str, update_data: SessionUpdate, session: Session = Depends(get_session)):
-       # 1. Session 조회
-       # 2. Topic 존재 확인 (update_data.topic_id가 있는 경우)
-       # 3. 업데이트 수행 (sqlmodel update)
-       # ...
-   ```
 
 ---
 
@@ -76,27 +85,26 @@ class SessionUpdate(BaseModel):
 
 ### Automated Tests
 
-새로운 테스트 파일 `src/tasktests/phase2_5/test_chat_topic_move.py` 생성하여 다음 시나리오 검증:
+새로운 테스트 파일 `src/tasktests/phase2_5/test_session_api.py`를 생성하여 다음 시나리오 검증:
 
-1. **Create with Topic**: 존재하는 `topic_id`로 세션 생성 성공 확인
-2. **Create with Invalid Topic**: 존재하지 않는 `topic_id`로 생성 시 404 에러 확인
-3. **Move to Topic**: 기존 세션을 특정 Topic으로 이동 확인 (`topic_id` 업데이트)
-4. **Remove from Topic**: Topic에 속한 세션을 Topic 없음 상태로 이동 확인
-5. **Move to Invalid**: 존재하지 않는 Topic으로 이동 시도 시 404 에러 확인
+1.  **세션 목록 조회**: Topic ID 필터링 동작 여부, 정렬 순서.
+2.  **세션 상세 조회**: 존재하지 않는 ID 요청 시 404.
+3.  **세션 삭제**: 삭제 후 조회 시 404, 관련 메시지가 정리가 되었는지(DB 레벨 체크).
+4.  **메시지 조회**: 순서(오름차순) 확인.
 
-**Run Verification:**
+### Command
 
 ```bash
-python -m pytest src/tasktests/phase2_5/test_chat_topic_move.py -v
+pytest src/tasktests/phase2_5/test_session_api.py -v
 ```
 
 ---
 
 ## 요약
 
-| 구분             | 내용                                             |
-| :--------------- | :----------------------------------------------- |
-| **New DTO**      | `SessionUpdate` (`src/dtypes/api.py`)            |
-| **Modified API** | `POST /sessions` (Validation check)              |
-| **New API**      | `PATCH /sessions/{id}` (Move logic)              |
-| **New Test**     | `src/tasktests/phase2_5/test_chat_topic_move.py` |
+| 구분          | 내용                                         |
+| :------------ | :------------------------------------------- |
+| **수정 파일** | `src/api/routers/session.py`                 |
+| **생성 파일** | `src/tasktests/phase2_5/test_session_api.py` |
+| **주요 기능** | 세션 목록/상세 조회, 삭제, 메시지 이력 조회  |
+| **의존성**    | `sqlmodel`, `fastapi`                        |
