@@ -52,10 +52,15 @@
 
 ## Phase 3: PARA 대시보드 (Project Dashboard)
 
-- [ ] **프로젝트 스캐닝**: `Project/` 폴더 하위 디렉토리 자동 인식
-- [ ] **메타데이터 관리**: SQLite 기반 진척도, 최종 활동일 저장
-- [ ] **유기 프로젝트 감지**: 30일 이상 수정 없는 프로젝트 경고 표시
-- [ ] **Frontend UI**: React + Tailwind 기반 대시보드 구현
+- [ ] **프로젝트 관리 & 메타데이터 (Backend Core)**: 사용자 지정 프로젝트 폴더 관리 및 동기화
+  - [x] **Data Layer**: Project 테이블 Schema 정의 (SQLModel) 및 CRUD (`src/core/domain/project.py`)
+  - [ ] **Scanner Module**: 등록된 프로젝트 폴더 탐색, 메타데이터(수정일) 추출, DB Sync 로직 (`src/core/project/scanner.py`)
+- [ ] **API & 비즈니스 로직 (Backend API)**:
+  - [ ] **Stale Logic**: 유기 프로젝트(30일 미수정) 판별 및 진척도 계산 로직
+  - [ ] **API Endpoints**: `/projects` (목록/필터), `/projects/{id}` 구현 (`src/api/routers/project.py`)
+- [ ] **Frontend UI (Dashboard)**:
+  - [ ] **Dashboard Page**: 전체 프로젝트 리스트 및 상태별 필터링 UI
+  - [ ] **Project Card**: 프로젝트별 요약 정보 및 Stale 경고 시각화
 
 ---
 
