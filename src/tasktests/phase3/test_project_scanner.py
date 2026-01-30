@@ -1,7 +1,7 @@
 import pytest
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlmodel import Session, SQLModel, create_engine
 from sqlalchemy.pool import StaticPool
 
@@ -40,17 +40,20 @@ def test_scan_updates_last_modified(session: Session, temp_vault: Path):
     proj_dir = temp_vault / "MyProject"
     proj_dir.mkdir()
     
-    old_time = datetime(2020, 1, 1)
+    old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
     project = Project(name="Test Project", path="MyProject", last_modified_at=old_time)
     session.add(project)
     session.commit()
     session.refresh(project)
+    if project.last_modified_at.tzinfo is None:
+        project.last_modified_at = project.last_modified_at.replace(tzinfo=timezone.utc)
     
     scanner = ProjectScanner(session, temp_vault)
     
     # 2. 파일 없음 -> 업데이트 안됨
     assert scanner.scan_project(project) is False
     assert project.last_modified_at == old_time
+    assert project.file_count == 0
     
     # 3. 파일 생성 (과거지만 Project 시간보다는 뒤)
     file_a = proj_dir / "note.md"
@@ -60,6 +63,7 @@ def test_scan_updates_last_modified(session: Session, temp_vault: Path):
     # (파일을 방금 만들었으므로 mtime은 old_time(2020년)보다 큼)
     assert scanner.scan_project(project) is True
     assert project.last_modified_at > old_time
+    assert project.file_count == 1
     first_update = project.last_modified_at
     
     # 5. 더 최신 파일 생성
@@ -70,6 +74,7 @@ def test_scan_updates_last_modified(session: Session, temp_vault: Path):
     # 6. 재스캔 -> 갱신됨
     assert scanner.scan_project(project) is True
     assert project.last_modified_at > first_update
+    assert project.file_count == 2
 
 def test_scan_nested_structure(session: Session, temp_vault: Path):
     """사용자 요청: 중첩된 폴더 구조 (note/1.PARA...) 인식 테스트"""
@@ -100,7 +105,7 @@ def test_scan_nested_structure(session: Session, temp_vault: Path):
 
 def test_scan_all_projects(session: Session, temp_vault: Path):
     """모든 활성 프로젝트 스캔 테스트"""
-    old_time = datetime(2020, 1, 1)
+    old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
     
     # Proj A: 활성, 파일 있음 (오래된 last_modified_at 설정 -> 업데이트 되어야 함)
     dir_a = temp_vault / "ProjectA"
@@ -124,6 +129,8 @@ def test_scan_all_projects(session: Session, temp_vault: Path):
     
     # p_b의 초기 시간 저장
     session.refresh(p_b)
+    if p_b.last_modified_at and p_b.last_modified_at.tzinfo is None:
+        p_b.last_modified_at = p_b.last_modified_at.replace(tzinfo=timezone.utc)
     p_b_initial_time = p_b.last_modified_at
     
     scanner = ProjectScanner(session, temp_vault)
@@ -135,6 +142,10 @@ def test_scan_all_projects(session: Session, temp_vault: Path):
     session.refresh(p_a)
     session.refresh(p_b)
     session.refresh(p_c)
+    
+    for p in [p_a, p_b, p_c]:
+        if p.last_modified_at and p.last_modified_at.tzinfo is None:
+            p.last_modified_at = p.last_modified_at.replace(tzinfo=timezone.utc)
     
     assert p_a.last_modified_at > old_time
     assert p_b.last_modified_at == p_b_initial_time

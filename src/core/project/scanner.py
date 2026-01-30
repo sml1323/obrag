@@ -7,7 +7,7 @@ Project Scanner Module
 
 from pathlib import Path
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlmodel import Session, select
 
@@ -57,7 +57,12 @@ class ProjectScanner:
         scanned_files = scanner.scan()
         
         if not scanned_files:
-            # 파일이 하나도 없으면 업데이트 안 함 (또는 폴더 자체 mtime 사용 고려 가능)
+            if project.file_count != 0:
+                project.file_count = 0
+                self.session.add(project)
+                self.session.commit()
+                self.session.refresh(project)
+                return True
             return False
             
         # 3. 최신 mtime 찾기
@@ -70,20 +75,33 @@ class ProjectScanner:
             except OSError:
                 continue
                 
-        if max_mtime == 0.0:
-            return False
-            
-        # 4. DB 업데이트 (변경된 경우에만)
-        # timestamp to datetime
-        last_modified = datetime.fromtimestamp(max_mtime)
+        updated = False
         
-        # 기존 값과 비교 (tzinfo 처리 필요할 수 있으나, 보통 로컬 타임스탬프 기준)
-        # Project.last_modified_at이 없거나 더 최신이면 업데이트
-        if project.last_modified_at is None or last_modified > project.last_modified_at:
-            project.last_modified_at = last_modified
+        # Update file count
+        if project.file_count != len(scanned_files):
+            project.file_count = len(scanned_files)
+            updated = True
+
+        if max_mtime > 0.0:
+            # 4. DB 업데이트 (변경된 경우에만)
+            # timestamp to datetime (UTC)
+            last_modified = datetime.fromtimestamp(max_mtime, tz=timezone.utc)
+            
+            # 기존 값과 비교 (DB에서 naive로 올 경우 UTC로 가정)
+            current_last_modified = project.last_modified_at
+            if current_last_modified and current_last_modified.tzinfo is None:
+                current_last_modified = current_last_modified.replace(tzinfo=timezone.utc)
+
+            if current_last_modified is None or last_modified > current_last_modified:
+                project.last_modified_at = last_modified
+                updated = True
+        
+        if updated:
             self.session.add(project)
             self.session.commit()
             self.session.refresh(project)
+            if project.last_modified_at and project.last_modified_at.tzinfo is None:
+                project.last_modified_at = project.last_modified_at.replace(tzinfo=timezone.utc)
             return True
             
         return False

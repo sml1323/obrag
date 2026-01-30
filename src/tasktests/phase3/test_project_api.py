@@ -67,11 +67,13 @@ def test_scanner_ignores_non_md_files(session: Session, temp_vault: Path):
     proj_dir = temp_vault / "MyProject"
     proj_dir.mkdir()
     
-    old_time = datetime(2020, 1, 1)
+    old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
     project = Project(name="Test Project", path="MyProject", last_modified_at=old_time)
     session.add(project)
     session.commit()
     session.refresh(project)
+    if project.last_modified_at.tzinfo is None:
+        project.last_modified_at = project.last_modified_at.replace(tzinfo=timezone.utc)
     
     scanner = ProjectScanner(session, temp_vault)
     
@@ -88,6 +90,8 @@ def test_scanner_ignores_non_md_files(session: Session, temp_vault: Path):
     assert scanner.scan_project(project) is True
     
     session.refresh(project)
+    if project.last_modified_at and project.last_modified_at.tzinfo is None:
+        project.last_modified_at = project.last_modified_at.replace(tzinfo=timezone.utc)
     assert project.last_modified_at > old_time
 
 # ----------------------------------------------------------------------------
@@ -184,16 +188,29 @@ def test_update_project(client: TestClient, session: Session):
     
     response = client.patch(
         f"/projects/{p.id}",
-        json={"name": "Updated", "is_active": False}
+        json={"name": "Updated", "is_active": False, "progress": 50}
     )
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "Updated"
     assert data["is_active"] is False
+    assert data["progress"] == 50
     
     session.refresh(p)
     assert p.name == "Updated"
     assert p.is_active is False
+    assert p.progress == 50
+
+def test_update_project_invalid_progress(client: TestClient, session: Session):
+    p = Project(name="P", path="P")
+    session.add(p)
+    session.commit()
+    
+    response = client.patch(f"/projects/{p.id}", json={"progress": 101})
+    assert response.status_code == 422
+    
+    response = client.patch(f"/projects/{p.id}", json={"progress": -1})
+    assert response.status_code == 422
 
 def test_delete_project(client: TestClient, session: Session):
     p = Project(name="DeleteMe", path="DeleteTest")

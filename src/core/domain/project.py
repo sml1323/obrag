@@ -23,3 +23,6 @@ class Project(SQLModel, table=True):
     # Metadata
     last_modified_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Last modification time of files in the project")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="When this project was registered")
+    
+    progress: int = Field(default=0, description="Project progress (0-100)")
+    file_count: int = Field(default=0, description="Number of markdown files in the project")

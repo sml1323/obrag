@@ -59,8 +59,11 @@
   - [x] **Stale Logic**: 유기 프로젝트(30일 미수정) 판별 및 진척도 계산 로직
   - [x] **API Endpoints**: `/projects` (목록/필터), `/projects/{id}` 구현 (`src/api/routers/project.py`)
 - [ ] **Frontend UI (Dashboard)**:
-  - [ ] **Dashboard Page**: 전체 프로젝트 리스트 및 상태별 필터링 UI
-  - [ ] **Project Card**: 프로젝트별 요약 정보 및 Stale 경고 시각화
+  - [x] **Backend Support**: `progress`, `file_count` 필드 추가 및 Scanner 로직 업데이트
+  - [x] **API Client**: Frontend `lib/api` 클라이언트 및 Data Hooks 구현
+  - [x] **Dashboard Integration**: Mock Data 제거 및 Real API 연동
+  - [ ] **UI Refinement**: 데이터 연동 후 UI 상태(Loading, Error) 처리 및 Stale 시각화 검증
+  - [ ] **E2E Debugging**: 실제 브라우저(Headless Chrome 등) 조작을 통한Embedding/Chat 기능 장애 원인 파악 및 해결
 
 ---
 

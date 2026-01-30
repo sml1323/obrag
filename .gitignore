@@ -14,3 +14,13 @@ __pycache__/
 /.codex/
 /.gemini/
 /.opencode/
+
+# Frontend
+front/node_modules/
+front/.next/
+front/out/
+front/build/
+front/.env*.local
+front/npm-debug.log*
+front/yarn-debug.log*
+front/yarn-error.log*
