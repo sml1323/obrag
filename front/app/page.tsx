@@ -161,6 +161,18 @@ export default function Home() {
     if (savedParaRoot) {
       setParaRoot(savedParaRoot);
     }
+
+    const savedEmbeddingPaths = localStorage.getItem("obsidian-ai-embedding-paths");
+    if (savedEmbeddingPaths) {
+      try {
+        const parsed = JSON.parse(savedEmbeddingPaths);
+        if (Array.isArray(parsed)) {
+          setEmbeddingScope(parsed);
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
   }, []);
 
   // Sync projects from backend
@@ -603,7 +615,7 @@ export default function Home() {
       setEmbeddingState("idle");
       alert("인덱싱에 실패했습니다. 백엔드 상태를 확인해주세요.");
     }
-  }, [activeProjectId, vaultProjects, settings]);
+  }, [activeProjectId, embeddingScope, settings, vaultProjects]);
 
   const activeProject = vaultProjects.find((p) => p.id === activeProjectId);
   const activeTopic = topics.find((t) => t.id === activeTopicId);

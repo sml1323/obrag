@@ -18,6 +18,7 @@ from db.engine import create_db_and_tables
 # Lifespan
 # ============================================================================
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
@@ -46,6 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # App Factory
 # ============================================================================
 
+
 def create_app() -> FastAPI:
     """FastAPI 앱 팩토리."""
 
@@ -66,14 +68,27 @@ def create_app() -> FastAPI:
     )
 
     # 라우터 등록
-    # 라우터 등록
-    from .routers import chat, sync, health, topic, session, project
+    from .routers import (
+        chat,
+        sync,
+        health,
+        topic,
+        session,
+        project,
+        settings,
+        para,
+        vault,
+    )
+
     app.include_router(chat.router)
     app.include_router(sync.router)
     app.include_router(health.router)
     app.include_router(topic.router)
     app.include_router(session.router)
     app.include_router(project.router)
+    app.include_router(settings.router)
+    app.include_router(para.router)
+    app.include_router(vault.router)
 
     return app
 

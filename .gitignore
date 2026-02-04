@@ -14,3 +14,25 @@ __pycache__/
 /.codex/
 /.gemini/
 /.opencode/
+# Database & Vector DB
+database.db
+*.db
+*.sqlite3
+chroma_db/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# Logs
+*.log
+
+# Tools
+.codeboarding
+.sisyphus
+
+# User Personal Data (Important)
+note/
+# Coverage reports
+.coverage
+htmlcov/
+xmlcov/

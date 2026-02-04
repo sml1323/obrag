@@ -25,6 +25,11 @@ class ChatRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20, description="검색할 문서 수")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="응답 다양성")
     max_tokens: Optional[int] = Field(default=None, ge=1, description="최대 토큰 수")
+    
+    # Dynamic Configuration
+    llm_provider: Optional[str] = Field(default=None, description="LLM 제공자 (openai, gemini, ollama)")
+    llm_model: Optional[str] = Field(default=None, description="사용할 모델명")
+    api_key: Optional[str] = Field(default=None, description="API 키 (제공될 경우 해당 키 사용)")
 
 
 class ChatHistoryRequest(ChatRequest):

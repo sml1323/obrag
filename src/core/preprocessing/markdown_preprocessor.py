@@ -233,6 +233,8 @@ def semantic_chunk(
     Returns:
         Chunk 객체 리스트
     """
+    if not text or not text.strip():
+        return []
     # 1. YAML frontmatter 추출
     frontmatter, body = extract_frontmatter(text)
 
@@ -245,6 +247,8 @@ def semantic_chunk(
     if not header_marks:
         # 헤더가 없으면 전체를 하나의 청크로
         restored_body = restore_code_blocks(body, code_placeholders)
+        if not restored_body.strip():
+            return []
         base_metadata = {
             "source": source,
             "header_path": "",
@@ -341,7 +345,7 @@ def semantic_chunk(
         else:
             chunks.append(Chunk(text=ptext, metadata=pmeta))
 
-    return chunks
+    return [chunk for chunk in chunks if chunk.text and chunk.text.strip()]
 
 
 # ============================================================================

@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "files": {
+    "prd.md": {
+      "content_hash": "ecf36c6dfc03828de6f836b73a75ecd9",
+      "mtime": 1769943452.2604713,
+      "chunk_count": 4,
+      "last_synced": "2026-02-02T10:21:31.586766"
+    },
+    "design/frontend-design-plan.md": {
+      "content_hash": "4d1271d4d63311ac7bd3b3528ae7ec54",
+      "mtime": 1769943786.5986776,
+      "chunk_count": 19,
+      "last_synced": "2026-02-02T10:21:32.340333"
+    },
+    "features/chroma_store.md": {
+      "content_hash": "4159410ad99574e246c6f049b676b6bc",
+      "mtime": 1769059045.0871143,
+      "chunk_count": 10,
+      "last_synced": "2026-02-02T10:21:32.836733"
+    },
+    "features/folder_scanner.md": {
+      "content_hash": "d9e8b08a62b9eb475e9081fe1b6f3372",
+      "mtime": 1768984754.8734014,
+      "chunk_count": 9,
+      "last_synced": "2026-02-02T10:21:33.226554"
+    },
+    "features/markdown_preprocessor.md": {
+      "content_hash": "28b2b8170a4e03dbf697b58f9c94564c",
+      "mtime": 1768979995.5632725,
+      "chunk_count": 7,
+      "last_synced": "2026-02-02T10:21:33.739017"
+    },
+    "spec/findings.md": {
+      "content_hash": "bb519422705bec161623c2689abf7ccf",
+      "mtime": 1769753524.5067189,
+      "chunk_count": 17,
+      "last_synced": "2026-02-02T10:21:34.365930"
+    },
+    "spec/mission.md": {
+      "content_hash": "46cc5def7a7fc56c55e5b73e0b667339",
+      "mtime": 1768575749.0010624,
+      "chunk_count": 4,
+      "last_synced": "2026-02-02T10:21:34.768946"
+    },
+    "spec/roadmap.md": {
+      "content_hash": "4319cccd1467fa22c0c28ebaa98e7a95",
+      "mtime": 1769753524.5070004,
+      "chunk_count": 7,
+      "last_synced": "2026-02-02T10:21:35.185782"
+    },
+    "spec/tech-stack.md": {
+      "content_hash": "302e405c054922a16ed5b0b3d3f50109",
+      "mtime": 1768575772.1765718,
+      "chunk_count": 7,
+      "last_synced": "2026-02-02T10:21:35.796051"
+    },
+    "subtask/current_task.md": {
+      "content_hash": "52f9c381cdeb9de6e6a8d540923991a3",
+      "mtime": 1769753524.507217,
+      "chunk_count": 7,
+      "last_synced": "2026-02-02T10:21:36.307630"
+    }
+  }
+}
