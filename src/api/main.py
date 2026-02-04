@@ -61,7 +61,7 @@ def create_app() -> FastAPI:
     # CORS 설정
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # 개발 환경용, 프로덕션에서는 특정 origin만 허용
+        allow_origins=["http://localhost:3000"],  # 개발 환경용, 프로덕션에서는 특정 origin만 허용
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
