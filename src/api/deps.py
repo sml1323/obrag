@@ -20,7 +20,7 @@ from core.rag import RAGChain, Retriever
 from core.llm import LLMFactory
 from core.embedding import EmbedderFactory
 from core.sync.incremental_syncer import IncrementalSyncer, create_syncer
-from db.chroma_store import ChromaStore
+from db.chroma_store import ChromaStore, derive_collection_name
 from config.models import OpenAILLMConfig, OpenAIEmbeddingConfig
 from sqlmodel import Session
 from db.engine import engine
@@ -29,6 +29,7 @@ from db.engine import engine
 # ============================================================================
 # App State
 # ============================================================================
+
 
 @dataclass
 class AppState:
@@ -41,7 +42,8 @@ class AppState:
 
 def init_app_state(
     chroma_path: str = "./chroma_db",
-    collection_name: str = "obsidian_notes",
+    base_collection_name: str = "obsidian_notes",
+    auto_derive_collection: bool = True,
 ) -> AppState:
     """
     앱 상태 초기화.
@@ -50,35 +52,60 @@ def init_app_state(
 
     Args:
         chroma_path: ChromaDB 저장 경로
-        collection_name: 컬렉션 이름
+        base_collection_name: 기본 컬렉션 이름
+        auto_derive_collection: True면 임베딩 모델명을 컬렉션명에 포함
 
     Returns:
         초기화된 AppState
     """
-    # 1. Embedder 생성
-    embed_config = OpenAIEmbeddingConfig(
-        model_name=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-    )
+    embedding_provider = os.getenv("EMBEDDING_PROVIDER", "openai").lower()
+    embedding_model = os.getenv("EMBEDDING_MODEL", "")
+
+    if embedding_provider == "ollama":
+        from config.models import OllamaEmbeddingConfig
+
+        if not embedding_model:
+            embedding_model = "nomic-embed-text"
+        embed_config = OllamaEmbeddingConfig(
+            model_name=embedding_model,  # type: ignore
+            base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        )
+    elif embedding_provider == "sentence_transformers":
+        from config.models import SentenceTransformerEmbeddingConfig
+
+        if not embedding_model:
+            embedding_model = "BAAI/bge-m3"
+        embed_config = SentenceTransformerEmbeddingConfig(
+            model_name=embedding_model,
+        )
+    else:
+        if not embedding_model:
+            embedding_model = "text-embedding-3-small"
+        embed_config = OpenAIEmbeddingConfig(
+            model_name=embedding_model  # type: ignore
+        )
+
     embedder = EmbedderFactory.create(embed_config)
 
-    # 2. ChromaStore 생성
+    if auto_derive_collection:
+        collection_name = derive_collection_name(
+            base_collection_name, embedder.model_name
+        )
+    else:
+        collection_name = base_collection_name
+
     chroma_store = ChromaStore(
         persist_path=chroma_path,
         collection_name=collection_name,
         embedder=embedder,
     )
 
-    # 3. LLM 생성
-    llm_config = OpenAILLMConfig(
-        model_name=os.getenv("LLM_MODEL", "gpt-4o-mini")
-    )
+    llm_config = OpenAILLMConfig(model_name=os.getenv("LLM_MODEL", "gpt-4o-mini"))  # type: ignore
     llm = LLMFactory.create(llm_config)
 
-    # 4. Retriever + RAGChain 생성
     retriever = Retriever(chroma_store)
     rag_chain = RAGChain(retriever=retriever, llm=llm)
 
-    # 5. IncrementalSyncer 생성
     obsidian_path = os.getenv("OBSIDIAN_PATH", "./docs")
     syncer = create_syncer(root_path=obsidian_path, chroma_store=chroma_store)
 
@@ -92,6 +119,7 @@ def init_app_state(
 # ============================================================================
 # Dependency Functions
 # ============================================================================
+
 
 def get_app_state(request: Request) -> AppState:
     """요청에서 앱 상태 가져오기."""

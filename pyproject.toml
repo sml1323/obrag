@@ -17,4 +17,5 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "tiktoken>=0.12.0",
     "sqlmodel>=0.0.16",
+    "sentence-transformers>=3.0.0",
 ]

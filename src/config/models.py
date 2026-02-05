@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 from typing import Literal, Union, get_args
 
-Provider = Literal["local", "openai"]
+Provider = Literal["local", "openai", "ollama", "sentence_transformers"]
 OpenAIEmbeddingModel = Literal["text-embedding-3-small", "text-embedding-3-large"]
 LocalEmbeddingModel = Literal["bge-m3", "bge-large-zh", "bge-base-en"]
+OllamaEmbeddingModel = Literal["nomic-embed-text", "mxbai-embed-large", "all-minilm"]
+SentenceTransformerModel = Literal["BAAI/bge-m3", "dragonkue/BGE-m3-ko"]
 
 
 @dataclass
@@ -35,8 +37,39 @@ class LocalEmbeddingConfig:
             raise ValueError(f"Invalid embedding model: {self.model_name}")
 
 
+@dataclass
+class OllamaEmbeddingConfig:
+    """Ollama 임베딩 설정"""
+
+    provider: Provider = "ollama"
+    model_name: str = "nomic-embed-text"
+    base_url: str = "http://localhost:11434"
+
+    def __post_init__(self):
+        if self.provider not in get_args(Provider):
+            raise ValueError(f"Invalid provider: {self.provider}")
+        # Allow any string for model_name to support custom models
+
+
+@dataclass
+class SentenceTransformerEmbeddingConfig:
+    """SentenceTransformer 임베딩 설정"""
+
+    provider: Provider = "sentence_transformers"
+    model_name: str = "BAAI/bge-m3"
+
+    def __post_init__(self):
+        if self.provider not in get_args(Provider):
+            raise ValueError(f"Invalid provider: {self.provider}")
+
+
 # Union type for factory pattern
-EmbeddingConfig = Union[OpenAIEmbeddingConfig, LocalEmbeddingConfig]
+EmbeddingConfig = Union[
+    OpenAIEmbeddingConfig,
+    LocalEmbeddingConfig,
+    OllamaEmbeddingConfig,
+    SentenceTransformerEmbeddingConfig,
+]
 
 
 # ============================================================================
@@ -51,6 +84,7 @@ GeminiLLMModel = Literal["gemini-1.5-pro", "gemini-1.5-flash"]
 @dataclass
 class OpenAILLMConfig:
     """OpenAI LLM 설정"""
+
     provider: LLMProvider = "openai"
     model_name: OpenAILLMModel = "gpt-4o-mini"
     api_key: str | None = None
@@ -65,6 +99,7 @@ class OpenAILLMConfig:
 @dataclass
 class GeminiLLMConfig:
     """Gemini LLM 설정"""
+
     provider: LLMProvider = "gemini"
     model_name: GeminiLLMModel = "gemini-1.5-flash"
     api_key: str | None = None
@@ -77,6 +112,7 @@ class GeminiLLMConfig:
 @dataclass
 class OllamaLLMConfig:
     """Ollama LLM 설정"""
+
     provider: LLMProvider = "ollama"
     model_name: str = "llama3"
     base_url: str = "http://localhost:11434"

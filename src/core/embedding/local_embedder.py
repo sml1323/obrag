@@ -1,71 +1,65 @@
 """
-Local Embedding Implementation (Skeleton)
+Local Embedding Implementation (Deprecated)
 
-BGE-M3 등 로컬 임베딩 모델을 위한 뼈대 구현.
-실제 모델 로딩은 추후 구현 예정.
+DEPRECATED: LocalEmbedder는 SentenceTransformerEmbedder로 대체되었습니다.
+기존 코드 호환성을 위해 유지되며, 내부적으로 SentenceTransformerEmbedder를 사용합니다.
 """
 
-from typing import List
+import warnings
+from typing import ClassVar, override
 
 from .strategy import Vector
+from .sentence_transformer_embedder import SentenceTransformerEmbedder
 
-
-# ============================================================================
-# Local Embedder (Skeleton)
-# ============================================================================
 
 class LocalEmbedder:
     """
-    로컬 임베딩 모델 구현체 (Skeleton).
-    
-    현재는 placeholder로, 실제 모델 로딩은 미구현 상태입니다.
-    BGE-M3 또는 다른 로컬 모델 통합 시 이 클래스를 확장합니다.
-    
-    사용법:
-        embedder = LocalEmbedder(model_name="bge-m3")
-        # 현재는 NotImplementedError 발생
+    로컬 임베딩 모델 구현체 (Deprecated).
+
+    DEPRECATED: SentenceTransformerEmbedder를 직접 사용하세요.
+    기존 코드 호환성을 위해 유지됩니다.
     """
-    
-    # 모델별 차원 수 (예상)
-    MODEL_DIMENSIONS = {
+
+    # 기존 모델명 -> HuggingFace 모델 ID 매핑
+    MODEL_NAME_MAPPING: ClassVar[dict[str, str]] = {
+        "bge-m3": "BAAI/bge-m3",
+        "bge-large-zh": "BAAI/bge-large-zh-v1.5",
+        "bge-base-en": "BAAI/bge-base-en-v1.5",
+    }
+
+    MODEL_DIMENSIONS: ClassVar[dict[str, int]] = {
         "bge-m3": 1024,
         "bge-large-zh": 1024,
         "bge-base-en": 768,
     }
-    
-    def __init__(self, model_name: str = "bge-m3"):
-        """
-        Args:
-            model_name: 로컬 임베딩 모델 이름
-        """
-        self.model_name = model_name
-        self._dimension = self.MODEL_DIMENSIONS.get(model_name, 1024)
-        self._model = None  # TODO: 실제 모델 로딩
-    
-    def embed(self, texts: List[str]) -> List[Vector]:
-        """
-        텍스트 리스트를 벡터 리스트로 변환.
-        
-        현재 미구현 상태 - NotImplementedError 발생.
-        
-        Args:
-            texts: 임베딩할 텍스트 리스트
-        
-        Returns:
-            각 텍스트에 대한 임베딩 벡터 리스트
-        
-        Raises:
-            NotImplementedError: 실제 모델 로딩 전까지 발생
-        """
-        raise NotImplementedError(
-            f"LocalEmbedder({self.model_name}) is not yet implemented. "
-            "Please use OpenAIEmbedder or wait for local model integration."
+
+    def __init__(self, model_name: str = "bge-m3") -> None:
+        warnings.warn(
+            (
+                "LocalEmbedder is deprecated. Use SentenceTransformerEmbedder directly. "
+                f"Example: SentenceTransformerEmbedder(model_name='{self.MODEL_NAME_MAPPING.get(model_name, model_name)}')"
+            ),
+            DeprecationWarning,
+            stacklevel=2,
         )
-    
+
+        self.model_name: str = model_name
+        self._dimension: int = self.MODEL_DIMENSIONS.get(model_name, 1024)
+
+        # HuggingFace 모델 ID로 매핑
+        hf_model_name = self.MODEL_NAME_MAPPING.get(model_name, model_name)
+        self._delegate: SentenceTransformerEmbedder = SentenceTransformerEmbedder(
+            model_name=hf_model_name
+        )
+
+    def embed(self, texts: list[str]) -> list[Vector]:
+        """SentenceTransformerEmbedder에 위임"""
+        return self._delegate.embed(texts)
+
     @property
     def dimension(self) -> int:
-        """임베딩 벡터 차원"""
-        return self._dimension
-    
+        return self._delegate.dimension
+
+    @override
     def __repr__(self) -> str:
-        return f"LocalEmbedder(model='{self.model_name}', dimension={self._dimension}, implemented=False)"
+        return f"LocalEmbedder(model='{self.model_name}', dimension={self.dimension}, deprecated=True)"

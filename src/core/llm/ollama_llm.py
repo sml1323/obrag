@@ -30,6 +30,9 @@ class OllamaLLM:
             model_name: 사용할 Ollama 모델 이름
             base_url: Ollama 서버 URL (OpenAI 호환 엔드포인트)
         """
+        if not base_url.endswith("/v1"):
+            base_url = f"{base_url.rstrip('/')}/v1"
+
         self._model_name = model_name
         self._base_url = base_url
         self._client = OpenAI(

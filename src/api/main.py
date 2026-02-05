@@ -18,6 +18,7 @@ from db.engine import create_db_and_tables
 # Lifespan
 # ============================================================================
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
@@ -46,6 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # App Factory
 # ============================================================================
 
+
 def create_app() -> FastAPI:
     """FastAPI 앱 팩토리."""
 
@@ -59,21 +61,34 @@ def create_app() -> FastAPI:
     # CORS 설정
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # 개발 환경용, 프로덕션에서는 특정 origin만 허용
+        allow_origins=["http://localhost:3000"],  # 개발 환경용, 프로덕션에서는 특정 origin만 허용
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
     # 라우터 등록
-    # 라우터 등록
-    from .routers import chat, sync, health, topic, session, project
+    from .routers import (
+        chat,
+        sync,
+        health,
+        topic,
+        session,
+        project,
+        settings,
+        para,
+        vault,
+    )
+
     app.include_router(chat.router)
     app.include_router(sync.router)
     app.include_router(health.router)
     app.include_router(topic.router)
     app.include_router(session.router)
     app.include_router(project.router)
+    app.include_router(settings.router)
+    app.include_router(para.router)
+    app.include_router(vault.router)
 
     return app
 

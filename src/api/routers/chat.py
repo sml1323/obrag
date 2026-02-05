@@ -13,6 +13,8 @@ from fastapi.responses import StreamingResponse
 from api.deps import get_rag_chain, get_session
 from core.domain.chat import Session, Message, Topic
 from core.rag import RAGChain
+from core.llm import LLMFactory
+from config.models import OpenAILLMConfig, GeminiLLMConfig, OllamaLLMConfig
 from sqlmodel import Session as DBSession
 from dtypes.api import (
     ChatRequest,
@@ -29,11 +31,12 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 # Helper Functions
 # ============================================================================
 
+
 def _convert_retrieval_to_sources(retrieval_result) -> list[SourceChunk]:
     """RetrievalResult를 SourceChunk 리스트로 변환."""
     return [
         SourceChunk(
-            content=chunk.content,
+            content=chunk.text,
             source=chunk.metadata.get("source", "unknown"),
             score=chunk.score,
         )
@@ -60,14 +63,59 @@ def _load_history(db: DBSession, session_id: str) -> list[dict]:
 
 
 def _save_message(db: DBSession, session_id: str, role: str, content: str):
+    """세션에 메시지 저장."""
     msg = Message(session_id=session_id, role=role, content=content)
     db.add(msg)
     db.commit()
 
 
+def _get_dynamic_chain(
+    request: ChatRequest, default_chain: RAGChain, db: DBSession
+) -> RAGChain:
+    """요청에 따른 동적 체인 생성. DB settings fallback."""
+    from core.domain.settings import Settings
+
+    db_settings = db.get(Settings, 1)
+
+    provider = request.llm_provider or (
+        db_settings.llm_provider if db_settings else None
+    )
+    model = request.llm_model or (db_settings.llm_model if db_settings else None)
+    api_key = request.api_key or (db_settings.llm_api_key if db_settings else None)
+
+    if not provider:
+        return default_chain
+
+    try:
+        if provider == "openai":
+            config = OpenAILLMConfig(model_name=model or "gpt-4o-mini", api_key=api_key)
+        elif provider == "gemini":
+            config = GeminiLLMConfig(
+                model_name=model or "gemini-1.5-flash",
+                api_key=api_key,
+            )
+        elif provider == "ollama":
+            ollama_endpoint = (
+                db_settings.ollama_endpoint if db_settings else "http://localhost:11434"
+            )
+            config = OllamaLLMConfig(
+                model_name=model or "llama3",
+                base_url=ollama_endpoint,
+            )
+        else:
+            return default_chain
+
+        llm = LLMFactory.create(config)
+        return RAGChain(retriever=default_chain._retriever, llm=llm)
+    except Exception as e:
+        print(f"Failed to create dynamic chain: {e}")
+        return default_chain
+
+
 # ============================================================================
 # Endpoints
 # ============================================================================
+
 
 @router.post("", response_model=ChatResponse)
 async def chat(
@@ -77,17 +125,21 @@ async def chat(
 ) -> ChatResponse:
     """
     단일 질의 RAG 응답.
-    
+
     동기 방식으로 전체 응답을 한 번에 반환합니다.
     """
     history = []
+
+    # Dynamic Chain Selection
+    active_chain = _get_dynamic_chain(request, chain, db)
+
     if request.session_id:
         _get_or_create_session(db, request.session_id)
         history = _load_history(db, request.session_id)
         _save_message(db, request.session_id, "user", request.question)
 
     if history:
-        response = chain.query_with_history(
+        response = active_chain.query_with_history(
             request.question,
             history=history,
             top_k=request.top_k,
@@ -95,16 +147,16 @@ async def chat(
             max_tokens=request.max_tokens,
         )
     else:
-        response = chain.query(
+        response = active_chain.query(
             request.question,
             top_k=request.top_k,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
         )
-    
+
     if request.session_id:
         _save_message(db, request.session_id, "assistant", response.answer)
-    
+
     return ChatResponse(
         answer=response.answer,
         sources=_convert_retrieval_to_sources(response.retrieval_result),
@@ -121,48 +173,52 @@ async def chat_stream(
 ) -> StreamingResponse:
     """
     SSE 스트리밍 응답.
-    
+
     Server-Sent Events 형식으로 실시간 응답을 스트리밍합니다.
     첫 번째 이벤트에서 sources 정보를, 이후 이벤트에서 응답 텍스트를 전송합니다.
     """
     history = []
+
+    # Dynamic Chain Selection
+    active_chain = _get_dynamic_chain(request, chain, db)
+
     if request.session_id:
         _get_or_create_session(db, request.session_id)
         history = _load_history(db, request.session_id)
         _save_message(db, request.session_id, "user", request.question)
 
-    retrieval_result, generator = chain.stream_query(
+    retrieval_result, generator = active_chain.stream_query(
         request.question,
         history=history if history else None,
         top_k=request.top_k,
         temperature=request.temperature,
         max_tokens=request.max_tokens,
     )
-    
+
     sources = _convert_retrieval_to_sources(retrieval_result)
-    
+
     async def event_generator() -> AsyncGenerator[str, None]:
         # 첫 번째 이벤트: sources 정보
         start_data = {
             "type": "start",
             "sources": [s.model_dump() for s in sources],
-            "model": chain._llm.model_name,
+            "model": active_chain._llm.model_name,
         }
         yield f"data: {json.dumps(start_data)}\n\n"
-        
+
         full_content = []
         # 텍스트 청크 스트리밍
         for chunk in generator:
             full_content.append(chunk)
             chunk_data = {"type": "content", "content": chunk}
             yield f"data: {json.dumps(chunk_data)}\n\n"
-        
+
         # 완료 이벤트
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
-        
+
         if request.session_id:
             _save_message(db, request.session_id, "assistant", "".join(full_content))
-    
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
@@ -180,7 +236,7 @@ async def chat_with_history(
 ) -> ChatResponse:
     """
     대화 이력 포함 멀티턴.
-    
+
     이전 대화 컨텍스트를 유지하며 응답합니다.
     """
     response = chain.query_with_history(
@@ -189,7 +245,7 @@ async def chat_with_history(
         top_k=request.top_k,
         temperature=request.temperature,
     )
-    
+
     return ChatResponse(
         answer=response.answer,
         sources=_convert_retrieval_to_sources(response.retrieval_result),

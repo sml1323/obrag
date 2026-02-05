@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBRAG // TEST_INTERFACE_V1</title>
+    <style>
+        :root {
+            --color-bg: #FFE600;
+            --color-main: #FFFFFF;
+            --color-accent-1: #FF6B9D;
+            --color-accent-2: #00D4FF;
+            --color-text: #000000;
+            --border-width: 4px;
+            --shadow-offset: 6px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-image: radial-gradient(#000 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .border-box {
+            border: var(--border-width) solid var(--color-text);
+        }
+
+        .hard-shadow {
+            box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--color-text);
+        }
+
+        .no-round {
+            border-radius: 0;
+        }
+
+        header {
+            background-color: var(--color-main);
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: var(--border-width) solid var(--color-text);
+            z-index: 10;
+        }
+
+        h1 {
+            margin: 0;
+            text-transform: uppercase;
+            font-weight: 900;
+            font-size: 2rem;
+            letter-spacing: -1px;
+            background-color: var(--color-text);
+            color: var(--color-main);
+            padding: 5px 15px;
+            transform: rotate(-1deg);
+        }
+
+        .status-indicator {
+            font-weight: 700;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--color-accent-2);
+            padding: 5px 10px;
+            border: var(--border-width) solid var(--color-text);
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            background-color: #00FF00;
+            border: 2px solid black;
+        }
+
+        .status-dot.offline {
+            background-color: #FF0000;
+        }
+
+        #chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            scroll-behavior: smooth;
+            background-color: rgba(255, 255, 255, 0.9);
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 15px;
+            position: relative;
+            border: var(--border-width) solid var(--color-text);
+            font-weight: 500;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background-color: var(--color-text);
+            color: var(--color-main);
+            box-shadow: -4px 4px 0px rgba(0,0,0,0.2);
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+            background-color: var(--color-main);
+            color: var(--color-text);
+            box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--color-text);
+        }
+
+        .message.assistant::before {
+            content: "BOT";
+            position: absolute;
+            top: -15px;
+            left: -4px;
+            background: var(--color-accent-1);
+            border: var(--border-width) solid var(--color-text);
+            padding: 2px 8px;
+            font-size: 0.7rem;
+            font-weight: 900;
+        }
+
+        .message.user::before {
+            content: "YOU";
+            position: absolute;
+            top: -15px;
+            right: -4px;
+            background: var(--color-accent-2);
+            border: var(--border-width) solid var(--color-text);
+            padding: 2px 8px;
+            font-size: 0.7rem;
+            font-weight: 900;
+            color: var(--color-text);
+        }
+
+        .sources-container {
+            margin-top: 15px;
+            border-top: 2px dashed var(--color-text);
+            padding-top: 10px;
+            font-size: 0.85rem;
+        }
+
+        .sources-title {
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            background: #ddd;
+            display: inline-block;
+            padding: 2px 5px;
+            border: 2px solid black;
+        }
+
+        .source-item {
+            background: #eee;
+            border: 2px solid black;
+            padding: 5px;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .source-score {
+            font-weight: 900;
+            color: var(--color-accent-1);
+        }
+
+        #input-area {
+            padding: 20px;
+            background-color: var(--color-main);
+            border-top: var(--border-width) solid var(--color-text);
+            display: flex;
+            gap: 15px;
+        }
+
+        textarea {
+            flex: 1;
+            padding: 15px;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: bold;
+            border: var(--border-width) solid var(--color-text);
+            background-color: #f8f8f8;
+            resize: none;
+            height: 60px;
+            outline: none;
+            transition: all 0.1s;
+        }
+
+        textarea:focus {
+            background-color: #fff;
+            box-shadow: 4px 4px 0px var(--color-accent-2);
+            transform: translate(-2px, -2px);
+        }
+
+        button#send-btn {
+            width: 100px;
+            background-color: var(--color-accent-1);
+            border: var(--border-width) solid var(--color-text);
+            font-weight: 900;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            cursor: pointer;
+            box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--color-text);
+            transition: all 0.1s;
+        }
+
+        button#send-btn:active {
+            transform: translate(var(--shadow-offset), var(--shadow-offset));
+            box-shadow: 0 0 0 var(--color-text);
+        }
+
+        button#send-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        @keyframes type {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        
+        .cursor {
+            display: inline-block;
+            width: 10px;
+            height: 1.2em;
+            background-color: black;
+            animation: blink 1s step-end infinite;
+            vertical-align: middle;
+            margin-left: 2px;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        .error-toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #FF0000;
+            color: white;
+            padding: 15px 30px;
+            border: 4px solid black;
+            font-weight: 900;
+            box-shadow: 6px 6px 0 black;
+            z-index: 100;
+            display: none;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="error-toast" class="error-toast">CONNECTION ERROR</div>
+
+    <header>
+        <h1>OBRAG // CHAT</h1>
+        <div class="status-indicator">
+            <div id="status-dot" class="status-dot"></div>
+            <span id="status-text">ONLINE</span>
+        </div>
+    </header>
+
+    <div id="chat-container">
+        <div class="message assistant">
+            Hi. I'm OBRAG. Ask me anything about your documents.
+            <br><br>
+            I'm ready.
+        </div>
+    </div>
+
+    <div id="input-area">
+        <textarea id="user-input" placeholder="TYPE YOUR QUERY HERE..." onkeydown="handleEnter(event)"></textarea>
+        <button id="send-btn" onclick="sendMessage()">SEND</button>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const errorToast = document.getElementById('error-toast');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+
+        const API_URL = 'http://localhost:8000/chat/stream';
+
+        function handleEnter(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function showError(msg) {
+            errorToast.innerText = msg || "CONNECTION ERROR";
+            errorToast.style.display = 'block';
+            setTimeout(() => {
+                errorToast.style.display = 'none';
+            }, 3000);
+        }
+
+        function setStatus(online) {
+            if (online) {
+                statusDot.classList.remove('offline');
+                statusText.innerText = "ONLINE";
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+            } else {
+                statusDot.classList.add('offline');
+                statusText.innerText = "OFFLINE";
+            }
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            userInput.value = '';
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+
+            appendMessage('user', text);
+
+            const assistantMsgContent = appendMessage('assistant', '');
+            
+            const cursor = document.createElement('span');
+            cursor.className = 'cursor';
+            assistantMsgContent.appendChild(cursor);
+
+            let accumulatedSources = null;
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        question: text,
+                        session_id: null,
+                        top_k: 5,
+                        temperature: 0.7
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server Error: ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    buffer += chunk;
+                    
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (line.trim() === '') continue;
+                        if (line.startsWith('data: ')) {
+                            const jsonStr = line.slice(6);
+                            try {
+                                const data = JSON.parse(jsonStr);
+                                handleEvent(data, assistantMsgContent, cursor, (srcs) => accumulatedSources = srcs);
+                            } catch (e) {
+                                console.error("JSON Parse error", e);
+                            }
+                        }
+                    }
+                }
+
+                if(cursor.parentNode) cursor.parentNode.removeChild(cursor);
+
+                if (accumulatedSources && accumulatedSources.length > 0) {
+                    appendSources(assistantMsgContent, accumulatedSources);
+                }
+
+            } catch (err) {
+                console.error(err);
+                showError("FAILED TO CONNECT TO OBRAG BACKEND");
+                assistantMsgContent.innerText += "\n[SYSTEM ERROR: CONNECTION FAILED]";
+                setStatus(false);
+            } finally {
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        function appendMessage(role, text) {
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            
+            if (role === 'user') {
+                div.innerText = text;
+            }
+            
+            chatContainer.appendChild(div);
+            scrollToBottom();
+            return div;
+        }
+
+        function handleEvent(data, element, cursor, setSources) {
+            if (data.type === 'start') {
+                if (data.sources) {
+                    setSources(data.sources);
+                }
+            } else if (data.type === 'content') {
+                const textNode = document.createTextNode(data.content);
+                element.insertBefore(textNode, cursor);
+                scrollToBottom();
+            } else if (data.type === 'done') {
+            }
+        }
+
+        function appendSources(messageElement, sources) {
+            const container = document.createElement('div');
+            container.className = 'sources-container';
+            
+            const title = document.createElement('div');
+            title.className = 'sources-title';
+            title.innerText = 'SOURCES_FOUND: ' + sources.length;
+            container.appendChild(title);
+
+            sources.forEach(src => {
+                const item = document.createElement('div');
+                item.className = 'source-item';
+                
+                const name = document.createElement('span');
+                const fileName = src.source.split('/').pop();
+                name.innerText = fileName;
+                
+                const score = document.createElement('span');
+                score.className = 'source-score';
+                score.innerText = (src.score * 100).toFixed(0) + '% MATCH';
+
+                item.appendChild(name);
+                item.appendChild(score);
+                container.appendChild(item);
+            });
+
+            messageElement.appendChild(container);
+            scrollToBottom();
+        }
+
+        userInput.focus();
+
+    </script>
+</body>
+</html>
