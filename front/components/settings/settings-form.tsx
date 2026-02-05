@@ -180,8 +180,8 @@ export function SettingsForm() {
               onChange={handleChange}
               options={[
                 { value: "openai", label: "OpenAI" },
-                { value: "gemini", label: "Google Gemini" },
                 { value: "ollama", label: "Ollama (Local)" },
+                { value: "sentence_transformers", label: "Sentence Transformers (Local)" },
               ]}
             />
             
@@ -191,26 +191,59 @@ export function SettingsForm() {
                 name="embedding_model"
                 value={formData.embedding_model}
                 onChange={handleChange}
-                placeholder="text-embedding-3-small"
+                placeholder={
+                  formData.embedding_provider === "openai" 
+                    ? "text-embedding-3-small" 
+                    : formData.embedding_provider === "ollama"
+                    ? "nomic-embed-text"
+                    : "BAAI/bge-m3"
+                }
               />
-              <div className="relative">
-                <Input
-                  label="Embedding API Key"
-                  name="embedding_api_key"
-                  type={showEmbeddingKey ? "text" : "password"}
-                  value={formData.embedding_api_key}
-                  onChange={handleChange}
-                  placeholder="sk-..."
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowEmbeddingKey(!showEmbeddingKey)}
-                  className="absolute right-0 top-0 text-xs font-bold uppercase underline hover:text-[#FF6B35]"
-                >
-                  {showEmbeddingKey ? "Hide" : "Show"}
-                </button>
-              </div>
+              {formData.embedding_provider === "openai" && (
+                <div className="relative">
+                  <Input
+                    label="Embedding API Key"
+                    name="embedding_api_key"
+                    type={showEmbeddingKey ? "text" : "password"}
+                    value={formData.embedding_api_key}
+                    onChange={handleChange}
+                    placeholder="sk-..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEmbeddingKey(!showEmbeddingKey)}
+                    className="absolute right-0 top-0 text-xs font-bold uppercase underline hover:text-[#FF6B35]"
+                  >
+                    {showEmbeddingKey ? "Hide" : "Show"}
+                  </button>
+                </div>
+              )}
             </div>
+
+            {formData.embedding_provider === "ollama" && (
+              <div className="animate-in fade-in slide-in-from-top-4">
+                <Input
+                  label="Ollama Embedding Endpoint"
+                  name="ollama_endpoint"
+                  value={formData.ollama_endpoint}
+                  onChange={handleChange}
+                  placeholder="http://localhost:11434"
+                />
+                <p className="mt-2 text-sm text-gray-600">
+                  Available models: nomic-embed-text (768d), mxbai-embed-large (1024d), all-minilm (384d)
+                </p>
+              </div>
+            )}
+
+            {formData.embedding_provider === "sentence_transformers" && (
+              <div className="animate-in fade-in slide-in-from-top-4 rounded border-2 border-dashed border-gray-300 bg-gray-50 p-4">
+                <p className="text-sm text-gray-600">
+                  <span className="font-bold">Recommended models:</span><br />
+                  • BAAI/bge-m3 (1024d) - Best multilingual<br />
+                  • dragonkue/BGE-m3-ko (1024d) - Korean optimized
+                </p>
+              </div>
+            )}
           </section>
 
           <div className="pt-4">

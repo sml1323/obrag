@@ -265,7 +265,7 @@ def create_syncer(
     Args:
         root_path: 스캔할 폴더 경로
         chroma_store: ChromaStore 인스턴스
-        registry_path: 레지스트리 파일 경로 (기본: root_path/.sync_registry.json)
+        registry_path: 레지스트리 파일 경로 (기본: root_path/.sync_registry_{collection_name}.json)
         include_paths: 포함할 폴더 경로 목록
         **chunk_options: 청킹 옵션
 
@@ -274,9 +274,9 @@ def create_syncer(
     """
     root = Path(root_path).resolve()
 
-    # 기본 레지스트리 경로
     if registry_path is None:
-        registry_path = root / ".sync_registry.json"
+        collection_name = chroma_store.collection_name
+        registry_path = root / f".sync_registry_{collection_name}.json"
 
     folder_scanner = FolderScanner(root, include_paths=include_paths)
     registry = SyncRegistry(registry_path)

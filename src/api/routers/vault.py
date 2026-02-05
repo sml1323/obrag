@@ -63,35 +63,43 @@ def build_directory_tree(
 
 @router.get("/tree", response_model=TreeResponse)
 def get_vault_tree(
-    project_id: int = Query(..., description="Project ID to scan"),
+    project_id: int | None = Query(None, description="Project ID to scan (optional)"),
     session: Session = Depends(get_session),
     app_state: AppState = Depends(get_app_state),
 ):
     """
-    Returns a recursive directory tree for the specified project (directories only).
+    Returns a recursive directory tree.
+    If project_id is provided, scans that project's path.
+    If project_id is None, scans the entire Vault Root.
     """
-    project = session.get(Project, project_id)
-    if not project:
-        raise HTTPException(
-            status_code=404, detail=f"Project with ID {project_id} not found"
-        )
-
     vault_root = app_state.syncer.folder_scanner.root_path
-    project_abs_path = (vault_root / project.path).resolve()
+    
+    if project_id is not None:
+        project = session.get(Project, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=404, detail=f"Project with ID {project_id} not found"
+            )
+        project_abs_path = (vault_root / project.path).resolve()
+        relative_path_start = project.path
+    else:
+        # Global Vault Mode
+        project_abs_path = vault_root
+        relative_path_start = ""
 
     if not project_abs_path.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Project path does not exist on disk: {project.path}",
+            detail=f"Path does not exist on disk: {project_abs_path}",
         )
     if not project_abs_path.is_dir():
         raise HTTPException(
-            status_code=400, detail=f"Project path is not a directory: {project.path}"
+            status_code=400, detail=f"Path is not a directory: {project_abs_path}"
         )
 
     root_node = TreeNode(
-        path=project.path,
-        name=project_abs_path.name if project.path else vault_root.name,
+        path=relative_path_start,
+        name=project_abs_path.name,
         is_dir=True,
         children=build_directory_tree(
             project_abs_path, vault_root, DEFAULT_IGNORE_PATTERNS

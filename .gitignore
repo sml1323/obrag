@@ -17,7 +17,12 @@ __pycache__/
 # Database & Vector DB
 database.db
 *.db
+*.db-journal
+*.db-shm
+*.db-wal
 *.sqlite3
+*.sqlite
+sqlite3
 chroma_db/
 
 # Jupyter Notebooks
@@ -36,3 +41,6 @@ note/
 .coverage
 htmlcov/
 xmlcov/
+
+docs/RAG_IMPROVEMENT_RESEARCH.md
+

@@ -41,8 +41,8 @@ export function EmbeddingScope() {
         const settings = await getSettings();
         if (settings.vault_path) {
           setVaultPath(settings.vault_path);
-          // Assume project_id=1 for now as requested
-          const treeData = await getVaultTree(1);
+          // Use global vault scope (project_id=undefined)
+          const treeData = await getVaultTree();
           setTree(treeData.nodes);
 
           // If no paths saved yet, select all by default
@@ -97,7 +97,7 @@ export function EmbeddingScope() {
     try {
       const result = await triggerSync({ 
         include_paths: Array.from(selectedPaths) 
-      }, 1); // project_id=1
+      });
       setSyncResult(result);
     } catch (error) {
       console.error("Sync failed:", error);
