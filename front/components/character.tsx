@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, type Variants } from "framer-motion";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export type CharacterMood = "default" | "speak" | "loading" | "sad";
@@ -28,7 +28,7 @@ const textSizes = {
 };
 
 // Animation variants for different moods
-const moodAnimations: Record<CharacterMood, Variants> = {
+const moodAnimations = {
   // default: 한숨 쉬는 느낌 (위아래 움직임 + 약간 눌림)
   default: {
     y: [0, 20, 0],
@@ -90,7 +90,7 @@ export function Character({
     <div className={cn("flex flex-col items-center justify-center gap-2", className)}>
       <motion.div
         className={cn("relative", sizeClasses[size])}
-        animate={moodAnimations[mood]}
+        animate={moodAnimations[mood] as import("framer-motion").TargetAndTransition}
       >
         {/* Character SVG - Original with fillRule evenodd for proper rendering */}
         <svg

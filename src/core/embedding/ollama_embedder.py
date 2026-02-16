@@ -56,6 +56,12 @@ class OllamaEmbedder:
         ordered = sorted(response.data, key=lambda item: item.index)
         return [item.embedding for item in ordered]
 
+    def embed_query(self, query: str) -> Vector:
+        return self.embed([query])[0]
+
+    def embed_documents(self, documents: list[str]) -> list[Vector]:
+        return self.embed(documents)
+
     @property
     def dimension(self) -> int:
         return self._dimension

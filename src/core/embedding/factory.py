@@ -12,6 +12,7 @@ from .openai_embedder import OpenAIEmbedder
 from .local_embedder import LocalEmbedder
 from .ollama_embedder import OllamaEmbedder
 from .sentence_transformer_embedder import SentenceTransformerEmbedder
+from .multilingual_e5_embedder import MultilingualE5Embedder
 
 # Config imports
 import sys
@@ -23,6 +24,7 @@ from config.models import (
     LocalEmbeddingConfig,
     OllamaEmbeddingConfig,
     SentenceTransformerEmbeddingConfig,
+    MultilingualE5EmbeddingConfig,
 )
 
 
@@ -35,6 +37,7 @@ EmbeddingConfig = Union[
     LocalEmbeddingConfig,
     OllamaEmbeddingConfig,
     SentenceTransformerEmbeddingConfig,
+    MultilingualE5EmbeddingConfig,
 ]
 
 
@@ -109,10 +112,19 @@ class EmbedderFactory:
                 model_name=config.model_name,
             )
 
+        elif config.provider == "multilingual_e5":
+            if not isinstance(config, MultilingualE5EmbeddingConfig):
+                raise TypeError(
+                    "MultilingualE5 provider requires MultilingualE5EmbeddingConfig"
+                )
+            return MultilingualE5Embedder(
+                model_name=config.model_name,
+            )
+
         else:
             raise ValueError(
                 f"Unknown provider: {config.provider}. "
-                "Supported providers: 'openai', 'local', 'ollama', 'sentence_transformers'"
+                "Supported providers: 'openai', 'local', 'ollama', 'sentence_transformers', 'multilingual_e5'"
             )
 
     @staticmethod

@@ -15,11 +15,11 @@ from .strategy import LLMResponse, Message
 class OllamaLLM:
     """
     Ollama LLM 구현체.
-    
+
     로컬 Ollama 서버를 통해 LLM 호출.
     OpenAI 호환 API를 사용하므로 추가 의존성 없이 구현.
     """
-    
+
     def __init__(
         self,
         model_name: str = "llama3.2",
@@ -39,7 +39,8 @@ class OllamaLLM:
             base_url=base_url,
             api_key="ollama",  # 필수이지만 Ollama에서 무시됨
         )
-    
+        self._last_stream_usage: Optional[dict] = None
+
     def generate(
         self,
         messages: List[Message],
@@ -49,12 +50,12 @@ class OllamaLLM:
     ) -> LLMResponse:
         """
         Ollama API 호출 (OpenAI 호환).
-        
+
         Args:
             messages: 대화 메시지 리스트
             temperature: 응답 다양성 (0.0 ~ 2.0)
             max_tokens: 최대 토큰 수
-        
+
         Returns:
             LLMResponse 객체
         """
@@ -64,16 +65,18 @@ class OllamaLLM:
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        
+
         return LLMResponse(
             content=response.choices[0].message.content or "",
             model=response.model,
             usage={
                 "input_tokens": response.usage.prompt_tokens if response.usage else 0,
-                "output_tokens": response.usage.completion_tokens if response.usage else 0,
-            }
+                "output_tokens": response.usage.completion_tokens
+                if response.usage
+                else 0,
+            },
         )
-    
+
     def stream_generate(
         self,
         messages: List[Message],
@@ -83,31 +86,38 @@ class OllamaLLM:
     ) -> Iterator[str]:
         """
         Ollama 스트리밍 응답 생성 (OpenAI 호환).
-        
+
         Args:
             messages: 대화 메시지 리스트
             temperature: 응답 다양성
             max_tokens: 최대 토큰 수
-        
+
         Yields:
             응답 텍스트 청크
         """
+        self._last_stream_usage = None
         response = self._client.chat.completions.create(
             model=self._model_name,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
             stream=True,
+            stream_options={"include_usage": True},
         )
-        
+
         for chunk in response:
+            if chunk.usage:
+                self._last_stream_usage = {
+                    "input_tokens": chunk.usage.prompt_tokens or 0,
+                    "output_tokens": chunk.usage.completion_tokens or 0,
+                }
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
-    
+
     @property
     def model_name(self) -> str:
         return self._model_name
-    
+
     @property
     def base_url(self) -> str:
         return self._base_url

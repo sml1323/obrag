@@ -21,6 +21,12 @@ def get_settings(session: Session = Depends(get_session)):
     return settings.mask_api_keys()
 
 
+def _is_masked_value(value: str | None) -> bool:
+    if not value:
+        return False
+    return value.startswith("***") or value == "***"
+
+
 @router.put("/", response_model=SettingsResponse)
 def update_settings(
     settings_in: SettingsUpdate, session: Session = Depends(get_session)
@@ -30,7 +36,11 @@ def update_settings(
         settings = Settings(id=1)
 
     update_data = settings_in.model_dump(exclude_unset=True)
+
+    api_key_fields = {"llm_api_key", "embedding_api_key"}
     for key, value in update_data.items():
+        if key in api_key_fields and _is_masked_value(value):
+            continue
         setattr(settings, key, value)
 
     settings.updated_at = datetime.now(timezone.utc)

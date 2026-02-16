@@ -1,7 +1,13 @@
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+}
+
 export interface SourceChunk {
   content: string;
   source: string;
   score: number;
+  relative_path?: string;
 }
 
 export interface ChatRequest {
@@ -19,10 +25,10 @@ export interface ChatResponse {
   answer: string;
   sources: SourceChunk[];
   model: string;
-  usage: any;
+  usage: TokenUsage;
 }
 
 export type SSEEvent =
   | { type: "start"; sources: SourceChunk[]; model: string }
   | { type: "content"; content: string }
-  | { type: "done" };
+  | { type: "done"; usage?: TokenUsage };

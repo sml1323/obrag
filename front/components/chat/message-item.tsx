@@ -1,5 +1,5 @@
 import React from 'react';
-import { SourceChunk } from '@/lib/types/chat';
+import { SourceChunk, TokenUsage } from '@/lib/types/chat';
 import { SourcesAccordion } from './sources-accordion';
 import { Bot, User } from 'lucide-react';
 
@@ -8,6 +8,7 @@ interface MessageItemProps {
     role: 'user' | 'assistant';
     content: string;
     sources?: SourceChunk[];
+    usage?: TokenUsage;
   };
   isStreaming?: boolean;
 }
@@ -43,6 +44,20 @@ export function MessageItem({ message, isStreaming }: MessageItemProps) {
         {!isUser && message.sources && message.sources.length > 0 && (
           <div className="mt-4 pt-2 border-t-2 border-black/10">
             <SourcesAccordion sources={message.sources} />
+          </div>
+        )}
+
+        {!isUser && message.usage && (message.usage.input_tokens > 0 || message.usage.output_tokens > 0) && (
+          <div className="mt-3 pt-2 border-t-2 border-black/10 flex items-center gap-3">
+            <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-black/30 bg-black/10">
+              IN {message.usage.input_tokens.toLocaleString()}
+            </span>
+            <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-black/30 bg-black/10">
+              OUT {message.usage.output_tokens.toLocaleString()}
+            </span>
+            <span className="text-[10px] font-bold opacity-60">
+              = {(message.usage.input_tokens + message.usage.output_tokens).toLocaleString()} tokens
+            </span>
           </div>
         )}
       </div>

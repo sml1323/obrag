@@ -5,13 +5,13 @@ Lifespan 관리, CORS 설정, 라우터 등록을 담당합니다.
 """
 
 from contextlib import asynccontextmanager
+from importlib import import_module
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .deps import AppState, init_app_state
-from db.engine import create_db_and_tables
+from .deps import init_app_state
 
 
 # ============================================================================
@@ -34,7 +34,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         - 리소스 정리
     """
     # Startup
-    create_db_and_tables()
+    engine_module = import_module("db.engine")
+    engine_module.create_db_and_tables()
     app.state.deps = init_app_state()
 
     yield
@@ -61,7 +62,9 @@ def create_app() -> FastAPI:
     # CORS 설정
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000"],  # 개발 환경용, 프로덕션에서는 특정 origin만 허용
+        allow_origins=[
+            "http://localhost:3000"
+        ],  # 개발 환경용, 프로덕션에서는 특정 origin만 허용
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -70,24 +73,26 @@ def create_app() -> FastAPI:
     # 라우터 등록
     from .routers import (
         chat,
-        sync,
+        embedding,
         health,
-        topic,
-        session,
-        project,
-        settings,
         para,
+        project,
+        session,
+        settings,
+        sync,
+        topic,
         vault,
     )
 
     app.include_router(chat.router)
-    app.include_router(sync.router)
+    app.include_router(embedding.router)
     app.include_router(health.router)
-    app.include_router(topic.router)
-    app.include_router(session.router)
-    app.include_router(project.router)
-    app.include_router(settings.router)
     app.include_router(para.router)
+    app.include_router(project.router)
+    app.include_router(session.router)
+    app.include_router(settings.router)
+    app.include_router(sync.router)
+    app.include_router(topic.router)
     app.include_router(vault.router)
 
     return app

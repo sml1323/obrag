@@ -10,35 +10,57 @@ import { ProjectFiles } from "./project-files"
 import { cn } from "@/lib/utils"
 
 interface ProjectCardProps {
-  project: ParaProjectRead;
+  project: ParaProjectRead
+  progress?: number
+  onProgressChange?: (projectId: string, progress: number) => void
+  staleDays?: number
+  variant?: "active" | "abandoned"
 }
 
-export function ProjectCard({ project }: ProjectCardProps) {
+export function ProjectCard({
+  project,
+  progress: controlledProgress,
+  onProgressChange,
+  staleDays = 30,
+  variant,
+}: ProjectCardProps) {
   const [isOpen, setIsOpen] = React.useState(false)
-  const [progress, setProgress] = React.useState(0)
   const [isMounted, setIsMounted] = React.useState(false)
+
+  const [localProgress, setLocalProgress] = React.useState(0)
+
+  const isControlled = controlledProgress !== undefined
 
   React.useEffect(() => {
     setIsMounted(true)
-    const saved = localStorage.getItem(`para-progress-${project.id}`)
-    if (saved) {
-      setProgress(parseInt(saved, 10))
+    if (!isControlled) {
+      const saved = localStorage.getItem(`para-progress-${project.id}`)
+      if (saved) {
+        setLocalProgress(parseInt(saved, 10))
+      }
     }
-  }, [project.id])
+  }, [project.id, isControlled])
+
+  const progress = isControlled ? controlledProgress : localProgress
 
   const handleProgressChange = (value: number[]) => {
-    const newProgress = value[0]
-    setProgress(newProgress)
-    localStorage.setItem(`para-progress-${project.id}`, newProgress.toString())
+    const next = value[0]
+    if (isControlled && onProgressChange) {
+      onProgressChange(project.id, next)
+    } else {
+      setLocalProgress(next)
+      localStorage.setItem(`para-progress-${project.id}`, next.toString())
+    }
   }
 
   const lastModified = project.last_modified_at ? new Date(project.last_modified_at) : null
-  const isStale = lastModified ? differenceInDays(new Date(), lastModified) > 30 : false
+  const isStale = lastModified ? differenceInDays(new Date(), lastModified) > staleDays : false
 
   return (
     <div className={cn(
       "bg-[#fffdf5] border-[3px] border-black p-4 relative transition-all",
-      "shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]"
+      "shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]",
+      variant === "abandoned" && "border-l-[6px] border-l-[#f87171]"
     )}>
       <div 
         className="flex justify-between items-start mb-4 cursor-pointer"

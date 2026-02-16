@@ -37,7 +37,8 @@ export function useSSE<T>(): UseSSEReturn<T> {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorBody = await response.json().catch(() => ({ detail: `HTTP error ${response.status}` }));
+        throw new Error(errorBody.detail || `HTTP error! status: ${response.status}`);
       }
       
       if (!response.body) {

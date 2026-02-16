@@ -18,4 +18,5 @@ dependencies = [
     "tiktoken>=0.12.0",
     "sqlmodel>=0.0.16",
     "sentence-transformers>=3.0.0",
+    "rank-bm25>=0.2.2",
 ]

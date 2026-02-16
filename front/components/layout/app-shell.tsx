@@ -1,10 +1,25 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { getSettings } from '@/lib/api/settings';
 import { SidebarNav } from "./sidebar-nav";
-import Mascot, { MascotProvider } from "./mascot";
+import { MascotProvider } from "./mascot";
+import { SystemStatus } from "./system-status";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const [vaultName, setVaultName] = useState("/ WORKSPACE");
+
+  useEffect(() => {
+    getSettings().then(settings => {
+      if (settings.vault_path) {
+        const name = settings.vault_path.split(/[/\\]/).filter(Boolean).pop();
+        if (name) {
+          setVaultName(`/ ${name}`);
+        }
+      }
+    }).catch(console.error);
+  }, []);
+
   return (
     <MascotProvider>
       <div className="flex h-screen w-screen bg-[#FFFEF0] text-[#1a1a1a] overflow-hidden font-sans">
@@ -18,14 +33,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="p-4 border-t-[3px] border-[#1a1a1a] flex flex-col items-center justify-center gap-2 bg-[#FFFEF0]">
-                 <div className="text-xs font-bold uppercase tracking-widest mb-2">System Status</div>
-                 <Mascot />
+                 <SystemStatus />
             </div>
         </aside>
 
         <main className="flex-1 h-full overflow-hidden relative flex flex-col">
            <header className="h-16 border-b-[3px] border-[#1a1a1a] flex items-center px-6 justify-between bg-[#FFFEF0]">
-              <div className="font-bold text-lg">/ WORKSPACE</div>
+              <div className="font-bold text-lg">{vaultName}</div>
               <div className="text-sm font-mono opacity-60">v1.0.0-alpha</div>
            </header>
 

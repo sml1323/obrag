@@ -10,6 +10,11 @@ export interface TreeResponse {
   nodes: TreeNode[];
 }
 
+export interface DocumentResponse {
+  filename: string;
+  content: string;
+}
+
 export interface SyncResult {
   added: number;
   modified: number;
@@ -22,4 +27,10 @@ export interface SyncResult {
 export interface SyncTriggerBody {
   embedding_api_key?: string;
   include_paths?: string[];
+}
+
+export interface SyncTriggerOptions {
+  body?: SyncTriggerBody;
+  projectId?: number;
+  forceReindex?: boolean;
 }

@@ -75,11 +75,15 @@ class _EmbeddingFunctionAdapter:
         self._strategy = strategy
 
     def __call__(self, input: List[str]) -> List[List[float]]:
-        """ChromaDB가 문서 추가 시 호출하는 메서드"""
+        """ChromaDB가 문서 추가 시 호출 - embed_documents 사용"""
+        if hasattr(self._strategy, "embed_documents"):
+            return self._strategy.embed_documents(input)
         return self._strategy.embed(input)
 
     def embed_query(self, input: List[str]) -> List[List[float]]:
-        """ChromaDB가 쿼리 시 호출하는 메서드"""
+        """ChromaDB가 쿼리 시 호출 - embed_query 사용"""
+        if hasattr(self._strategy, "embed_query"):
+            return [self._strategy.embed_query(text) for text in input]
         return self._strategy.embed(input)
 
     def name(self) -> str:

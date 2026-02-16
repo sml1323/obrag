@@ -48,7 +48,7 @@ class SentenceTransformerEmbedder(EmbeddingStrategy):
         Args:
             model_name: HuggingFace 모델 ID (예: "BAAI/bge-m3")
         """
-        self.model_name: str = model_name
+        self._model_name: str = model_name
         self._model: _SentenceTransformerLike | None = None
         self._dimension: int | None = None
 
@@ -67,13 +67,13 @@ class SentenceTransformerEmbedder(EmbeddingStrategy):
         sentence_transformer = cast(
             _SentenceTransformerCtor, module.SentenceTransformer
         )
-        model = sentence_transformer(self.model_name)
+        model = sentence_transformer(self._model_name)
         self._model = model
 
         try:
             self._dimension = model.get_sentence_embedding_dimension()
         except Exception:
-            self._dimension = self.MODEL_DIMENSIONS.get(self.model_name, 1024)
+            self._dimension = self.MODEL_DIMENSIONS.get(self._model_name, 1024)
 
     @override
     def embed(self, texts: list[str]) -> list[Vector]:
@@ -94,14 +94,26 @@ class SentenceTransformerEmbedder(EmbeddingStrategy):
         embeddings = self._model.encode(texts, convert_to_numpy=True)
         return embeddings.tolist()
 
+    def embed_query(self, query: str) -> Vector:
+        return self.embed([query])[0]
+
+    def embed_documents(self, documents: list[str]) -> list[Vector]:
+        return self.embed(documents)
+
     @property
     @override
     def dimension(self) -> int:
         """임베딩 벡터 차원"""
         if self._dimension is not None:
             return self._dimension
-        return self.MODEL_DIMENSIONS.get(self.model_name, 1024)
+        return self.MODEL_DIMENSIONS.get(self._model_name, 1024)
+
+    @property
+    @override
+    def model_name(self) -> str:
+        """사용 중인 모델 이름"""
+        return self._model_name
 
     @override
     def __repr__(self) -> str:
-        return f"SentenceTransformerEmbedder(model='{self.model_name}', dimension={self.dimension})"
+        return f"SentenceTransformerEmbedder(model='{self._model_name}', dimension={self.dimension})"

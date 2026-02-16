@@ -8,13 +8,14 @@ __pycache__/
 .DS_Store
 .env
 .vscode
+
+# AI Agent configs
 /.agent/
 /.agents/
 /.claude/
 /.codex/
 /.gemini/
 /.opencode/
-<<<<<<< HEAD
 
 # Frontend
 front/node_modules/
@@ -25,7 +26,7 @@ front/.env*.local
 front/npm-debug.log*
 front/yarn-debug.log*
 front/yarn-error.log*
-=======
+
 # Database & Vector DB
 database.db
 *.db
@@ -39,6 +40,7 @@ chroma_db/
 
 # Jupyter Notebooks
 .ipynb_checkpoints
+notebook/
 
 # Logs
 *.log
@@ -49,11 +51,14 @@ chroma_db/
 
 # User Personal Data (Important)
 note/
+
 # Coverage reports
 .coverage
 htmlcov/
 xmlcov/
 
+# Docs (generated/draft)
 docs/RAG_IMPROVEMENT_RESEARCH.md
 
->>>>>>> integration
+# Scripts (local utilities)
+scripts/

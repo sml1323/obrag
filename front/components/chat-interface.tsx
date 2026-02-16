@@ -165,9 +165,8 @@ export function ChatInterface({
           </div>
           <Button
             type="submit"
-            size="icon"
             disabled={!input.trim() || isLoading}
-            className="h-[52px] w-[52px] rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50"
+            className="h-[52px] w-[52px] rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50 p-0"
           >
             <Send className="h-5 w-5" />
             <span className="sr-only">전송</span>

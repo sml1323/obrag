@@ -6,6 +6,7 @@ from .openai_embedder import OpenAIEmbedder
 from .local_embedder import LocalEmbedder
 from .ollama_embedder import OllamaEmbedder
 from .sentence_transformer_embedder import SentenceTransformerEmbedder
+from .multilingual_e5_embedder import MultilingualE5Embedder
 from .factory import EmbedderFactory
 
 __all__ = [
@@ -15,6 +16,7 @@ __all__ = [
     "LocalEmbedder",
     "OllamaEmbedder",
     "SentenceTransformerEmbedder",
+    "MultilingualE5Embedder",
     "EmbedderFactory",
     "Vector",
 ]

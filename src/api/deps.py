@@ -5,7 +5,7 @@ FastAPI 엔드포인트에 주입할 의존성을 정의합니다.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Generator
 from pathlib import Path
 import os
 
@@ -15,15 +15,22 @@ from dotenv import load_dotenv
 _env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(_env_path)
 
-from fastapi import Request
+from fastapi import Request, Depends, HTTPException
 from core.rag import RAGChain, Retriever
 from core.llm import LLMFactory
 from core.embedding import EmbedderFactory
 from core.sync.incremental_syncer import IncrementalSyncer, create_syncer
 from db.chroma_store import ChromaStore, derive_collection_name
-from config.models import OpenAILLMConfig, OpenAIEmbeddingConfig
+from config.models import (
+    OpenAILLMConfig,
+    OpenAIEmbeddingConfig,
+    OllamaEmbeddingConfig,
+    OllamaLLMConfig,
+    SentenceTransformerEmbeddingConfig,
+)
 from sqlmodel import Session
 from db.engine import engine
+from core.domain.settings import Settings
 
 
 # ============================================================================
@@ -58,7 +65,11 @@ def init_app_state(
     Returns:
         초기화된 AppState
     """
-    embedding_provider = os.getenv("EMBEDDING_PROVIDER", "openai").lower()
+    # Default embedder: sentence_transformers (no API key required)
+    # Actual embedder is dynamically created from DB Settings in get_rag_chain
+    embedding_provider = os.getenv(
+        "EMBEDDING_PROVIDER", "sentence_transformers"
+    ).lower()
     embedding_model = os.getenv("EMBEDDING_MODEL", "")
 
     if embedding_provider == "ollama":
@@ -100,7 +111,12 @@ def init_app_state(
         embedder=embedder,
     )
 
-    llm_config = OpenAILLMConfig(model_name=os.getenv("LLM_MODEL", "gpt-4o-mini"))  # type: ignore
+    # Default LLM: Ollama (no API key required) for startup fallback
+    # Actual LLM is dynamically created from DB Settings in get_rag_chain
+    llm_config = OllamaLLMConfig(
+        model_name=os.getenv("LLM_MODEL", "llama3"),
+        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+    )
     llm = LLMFactory.create(llm_config)
 
     retriever = Retriever(chroma_store)
@@ -121,14 +137,95 @@ def init_app_state(
 # ============================================================================
 
 
+def _create_embedder_from_settings(settings: Settings):
+    """
+    Settings에서 임베딩 설정을 읽어 Embedder 생성.
+
+    Returns:
+        (embedder, model_name) 튜플
+    """
+    provider = (settings.embedding_provider or "openai").lower()
+    model = settings.embedding_model or ""
+
+    if provider == "ollama":
+        if not model:
+            model = "nomic-embed-text"
+        config = OllamaEmbeddingConfig(
+            model_name=model,
+            base_url=settings.ollama_endpoint or "http://localhost:11434",
+        )
+    elif provider == "sentence_transformers":
+        if not model:
+            model = "BAAI/bge-m3"
+        config = SentenceTransformerEmbeddingConfig(model_name=model)
+    else:
+        if not model:
+            model = "text-embedding-3-small"
+        config = OpenAIEmbeddingConfig(
+            model_name=model,  # type: ignore
+            api_key=settings.embedding_api_key or settings.llm_api_key,
+        )
+
+    embedder = EmbedderFactory.create(config)
+    return embedder, model
+
+
+def _create_llm_from_settings(settings: Settings):
+    """Settings에서 LLM 설정을 읽어 LLM 생성."""
+    provider = (settings.llm_provider or "openai").lower()
+    model = settings.llm_model or ""
+
+    if provider == "ollama":
+        if not model:
+            model = "llama3"
+        config = OllamaLLMConfig(
+            model_name=model,
+            base_url=settings.ollama_endpoint or "http://localhost:11434",
+        )
+    else:
+        if not model:
+            model = "gpt-4o-mini"
+        config = OpenAILLMConfig(
+            model_name=model,
+            api_key=settings.llm_api_key,
+        )
+
+    return LLMFactory.create(config)
+
+
 def get_app_state(request: Request) -> AppState:
     """요청에서 앱 상태 가져오기."""
     return request.app.state.deps
 
 
 def get_rag_chain(request: Request) -> RAGChain:
-    """RAGChain 의존성 주입."""
-    return request.app.state.deps.rag_chain
+    """RAGChain 의존성 주입 - DB Settings 기반으로 동적 생성."""
+    default_chain = request.app.state.deps.rag_chain
+    default_store = request.app.state.deps.chroma_store
+
+    with Session(engine) as db:
+        db_settings = db.get(Settings, 1)
+        if not db_settings:
+            return default_chain
+
+        try:
+            embedder, model_name = _create_embedder_from_settings(db_settings)
+            collection_name = derive_collection_name("obsidian_notes", model_name)
+
+            chroma_store = ChromaStore(
+                persist_path=str(default_store.persist_path),
+                collection_name=collection_name,
+                embedder=embedder,
+            )
+
+            llm = _create_llm_from_settings(db_settings)
+            retriever = Retriever(chroma_store)
+            return RAGChain(retriever=retriever, llm=llm)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            print(f"Failed to create dynamic RAGChain: {e}")
+            return default_chain
 
 
 def get_chroma_store(request: Request) -> ChromaStore:

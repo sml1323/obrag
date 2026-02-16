@@ -39,6 +39,24 @@ class EmbeddingStrategy(Protocol):
         """
         ...
 
+    def embed_query(self, query: str) -> Vector:
+        """
+        쿼리 전용 임베딩.
+
+        instruction-tuned 모델(E5 등)은 쿼리에 다른 prefix 사용.
+        기본 구현은 embed()를 호출.
+        """
+        ...
+
+    def embed_documents(self, documents: List[str]) -> List[Vector]:
+        """
+        문서 전용 임베딩.
+
+        instruction-tuned 모델(E5 등)은 문서에 다른 prefix 사용.
+        기본 구현은 embed()를 호출.
+        """
+        ...
+
     @property
     def dimension(self) -> int:
         """임베딩 벡터 차원"""
@@ -71,12 +89,17 @@ class FakeEmbedder:
         """텍스트 길이 기반 가짜 임베딩 생성"""
         vectors = []
         for text in texts:
-            # 텍스트 길이와 해시를 조합하여 결정론적 벡터 생성
             base = float(len(text))
             text_hash = hash(text) % 1000
             vector = [(base + i + text_hash) / 1000.0 for i in range(self._dimension)]
             vectors.append(vector)
         return vectors
+
+    def embed_query(self, query: str) -> Vector:
+        return self.embed([query])[0]
+
+    def embed_documents(self, documents: List[str]) -> List[Vector]:
+        return self.embed(documents)
 
     @property
     def dimension(self) -> int:

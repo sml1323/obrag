@@ -7,7 +7,7 @@ RAG 기반 채팅 엔드포인트를 제공합니다.
 import json
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from api.deps import get_rag_chain, get_session
@@ -39,6 +39,7 @@ def _convert_retrieval_to_sources(retrieval_result) -> list[SourceChunk]:
             content=chunk.text,
             source=chunk.metadata.get("source", "unknown"),
             score=chunk.score,
+            relative_path=chunk.metadata.get("relative_path"),
         )
         for chunk in retrieval_result.chunks
     ]
@@ -69,6 +70,27 @@ def _save_message(db: DBSession, session_id: str, role: str, content: str):
     db.commit()
 
 
+def _validate_api_key(provider: str, api_key: str | None) -> None:
+    """API 키 유효성 검사."""
+    if provider == "openai":
+        if not api_key:
+            raise HTTPException(
+                status_code=400,
+                detail="OpenAI API key is required. Please configure it in Settings.",
+            )
+        if not api_key.startswith("sk-"):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid OpenAI API key format. API key must start with 'sk-'. Please update in Settings.",
+            )
+    elif provider == "gemini":
+        if not api_key:
+            raise HTTPException(
+                status_code=400,
+                detail="Gemini API key is required. Please configure it in Settings.",
+            )
+
+
 def _get_dynamic_chain(
     request: ChatRequest, default_chain: RAGChain, db: DBSession
 ) -> RAGChain:
@@ -86,12 +108,26 @@ def _get_dynamic_chain(
     if not provider:
         return default_chain
 
+    _validate_api_key(provider, api_key)
+
     try:
         if provider == "openai":
-            config = OpenAILLMConfig(model_name=model or "gpt-4o-mini", api_key=api_key)
+            valid_models = [
+                "gpt-4o",
+                "gpt-4o-mini",
+                "gpt-4-turbo",
+                "gpt-5-mini",
+                "gpt-5-nano",
+            ]
+            if model not in valid_models:
+                model = "gpt-4o-mini"
+            config = OpenAILLMConfig(model_name=model, api_key=api_key)
         elif provider == "gemini":
+            valid_models = ["gemini-1.5-pro", "gemini-1.5-flash"]
+            if model not in valid_models:
+                model = "gemini-1.5-flash"
             config = GeminiLLMConfig(
-                model_name=model or "gemini-1.5-flash",
+                model_name=model,
                 api_key=api_key,
             )
         elif provider == "ollama":
@@ -107,9 +143,10 @@ def _get_dynamic_chain(
 
         llm = LLMFactory.create(config)
         return RAGChain(retriever=default_chain._retriever, llm=llm)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"Failed to create dynamic chain: {e}")
-        return default_chain
+        raise HTTPException(status_code=500, detail=f"Failed to create LLM: {str(e)}")
 
 
 # ============================================================================
@@ -213,8 +250,8 @@ async def chat_stream(
             chunk_data = {"type": "content", "content": chunk}
             yield f"data: {json.dumps(chunk_data)}\n\n"
 
-        # 완료 이벤트
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        usage = getattr(active_chain._llm, "_last_stream_usage", None) or {}
+        yield f"data: {json.dumps({'type': 'done', 'usage': usage})}\n\n"
 
         if request.session_id:
             _save_message(db, request.session_id, "assistant", "".join(full_content))

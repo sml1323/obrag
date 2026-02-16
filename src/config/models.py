@@ -1,11 +1,19 @@
 from dataclasses import dataclass
 from typing import Literal, Union, get_args
 
-Provider = Literal["local", "openai", "ollama", "sentence_transformers"]
+Provider = Literal[
+    "local", "openai", "ollama", "sentence_transformers", "multilingual_e5"
+]
 OpenAIEmbeddingModel = Literal["text-embedding-3-small", "text-embedding-3-large"]
 LocalEmbeddingModel = Literal["bge-m3", "bge-large-zh", "bge-base-en"]
 OllamaEmbeddingModel = Literal["nomic-embed-text", "mxbai-embed-large", "all-minilm"]
 SentenceTransformerModel = Literal["BAAI/bge-m3", "dragonkue/BGE-m3-ko"]
+MultilingualE5Model = Literal[
+    "intfloat/multilingual-e5-large-instruct",
+    "intfloat/multilingual-e5-large",
+    "intfloat/multilingual-e5-base",
+    "intfloat/multilingual-e5-small",
+]
 
 
 @dataclass
@@ -19,8 +27,8 @@ class OpenAIEmbeddingConfig:
             raise ValueError(f"Invalid provider: {self.provider}")
         if self.model_name not in get_args(OpenAIEmbeddingModel):
             raise ValueError(f"Invalid embedding model: {self.model_name}")
-        if self.api_key is not None and self.api_key[:8] != "sk-proj-":
-            raise ValueError("openai api key must starts with 'sk-proj-'")
+        if self.api_key is not None and not self.api_key.startswith("sk-"):
+            raise ValueError("openai api key must start with 'sk-'")
 
 
 @dataclass
@@ -63,12 +71,25 @@ class SentenceTransformerEmbeddingConfig:
             raise ValueError(f"Invalid provider: {self.provider}")
 
 
+@dataclass
+class MultilingualE5EmbeddingConfig:
+    """Multilingual E5 임베딩 설정 (한영 cross-lingual 검색에 최적화)"""
+
+    provider: Provider = "multilingual_e5"
+    model_name: str = "intfloat/multilingual-e5-large-instruct"
+
+    def __post_init__(self):
+        if self.provider not in get_args(Provider):
+            raise ValueError(f"Invalid provider: {self.provider}")
+
+
 # Union type for factory pattern
 EmbeddingConfig = Union[
     OpenAIEmbeddingConfig,
     LocalEmbeddingConfig,
     OllamaEmbeddingConfig,
     SentenceTransformerEmbeddingConfig,
+    MultilingualE5EmbeddingConfig,
 ]
 
 
@@ -77,7 +98,9 @@ EmbeddingConfig = Union[
 # ============================================================================
 
 LLMProvider = Literal["openai", "gemini", "ollama"]
-OpenAILLMModel = Literal["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"]
+OpenAILLMModel = Literal[
+    "gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-5-mini", "gpt-5-nano"
+]
 GeminiLLMModel = Literal["gemini-1.5-pro", "gemini-1.5-flash"]
 
 

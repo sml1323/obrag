@@ -5,10 +5,11 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
-from api.deps import get_session
+from api.deps import get_session, get_chroma_store
 from api.schemas.para import ParaProjectRead
 from core.domain.settings import Settings
 from core.sync.sync_registry import load_registry
+from db.chroma_store import ChromaStore, derive_collection_name
 
 router = APIRouter(prefix="/para", tags=["para"])
 
@@ -31,8 +32,27 @@ def _resolve_para_root(vault_root: Path, para_root: str) -> Optional[str]:
     return rel or None
 
 
+def _find_registry_path(
+    chroma_store: ChromaStore,
+    vault_root: Path,
+    collection_name: str,
+) -> Optional[Path]:
+    candidates = [
+        chroma_store.persist_path / f".sync_registry_{collection_name}.json",
+        vault_root / f".sync_registry_{collection_name}.json",
+        vault_root / ".sync_registry.json",
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
+
+
 @router.get("/projects", response_model=List[ParaProjectRead])
-def list_para_projects(session: Session = Depends(get_session)):
+def list_para_projects(
+    session: Session = Depends(get_session),
+    chroma_store: ChromaStore = Depends(get_chroma_store),
+):
     settings = session.get(Settings, 1)
     if not settings or not settings.vault_path or not settings.para_root_path:
         return []
@@ -45,8 +65,11 @@ def list_para_projects(session: Session = Depends(get_session)):
     if not para_root_rel:
         return []
 
-    registry_path = vault_root / ".sync_registry.json"
-    if not registry_path.exists():
+    model_name = settings.embedding_model or "text-embedding-3-small"
+    collection_name = derive_collection_name("obsidian_notes", model_name)
+    registry_path = _find_registry_path(chroma_store, vault_root, collection_name)
+
+    if registry_path is None:
         return []
 
     registry = load_registry(registry_path)
@@ -58,7 +81,7 @@ def list_para_projects(session: Session = Depends(get_session)):
         normalized = _normalize_relative_path(rel_path)
         if not normalized.startswith(prefix):
             continue
-        remainder = normalized[len(prefix):]
+        remainder = normalized[len(prefix) :]
         parts = remainder.split("/")
         if len(parts) < 2:
             # 프로젝트 폴더 바로 아래 파일은 제외
@@ -95,7 +118,10 @@ def list_para_projects(session: Session = Depends(get_session)):
             }
         )
 
-        if project["last_modified_at"] is None or last_modified > project["last_modified_at"]:
+        if (
+            project["last_modified_at"] is None
+            or last_modified > project["last_modified_at"]
+        ):
             project["last_modified_at"] = last_modified
 
     results: List[ParaProjectRead] = []

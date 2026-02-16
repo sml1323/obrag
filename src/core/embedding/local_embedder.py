@@ -56,6 +56,12 @@ class LocalEmbedder:
         """SentenceTransformerEmbedder에 위임"""
         return self._delegate.embed(texts)
 
+    def embed_query(self, query: str) -> Vector:
+        return self._delegate.embed_query(query)
+
+    def embed_documents(self, documents: list[str]) -> list[Vector]:
+        return self._delegate.embed_documents(documents)
+
     @property
     def dimension(self) -> int:
         return self._delegate.dimension

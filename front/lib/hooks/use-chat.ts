@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useSSE } from './use-sse';
-import { SSEEvent, SourceChunk } from '@/lib/types/chat';
+import { SSEEvent, SourceChunk, TokenUsage } from '@/lib/types/chat';
 import { Message, ChatSession, Topic } from '@/lib/types/sessions';
 import * as SessionAPI from '@/lib/api/sessions';
 import * as TopicAPI from '@/lib/api/topics';
@@ -10,6 +10,7 @@ import { useMascot } from '@/components/layout/mascot';
 interface ExtendedMessage extends Omit<Message, 'role'> {
   role: 'user' | 'assistant';
   sources?: SourceChunk[];
+  usage?: TokenUsage;
 }
 
 export function useChat() {
@@ -150,6 +151,13 @@ export function useChat() {
             )
           );
         } else if (event.type === 'done') {
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === assistantMsgId
+                ? { ...msg, usage: event.usage }
+                : msg
+            )
+          );
           setMascotState('idle');
         }
       }
