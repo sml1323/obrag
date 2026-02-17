@@ -170,14 +170,35 @@ class LLMStrategy(Protocol):
 
 **Neo-Brutalism** 디자인 컨셉의 모던 UI + 마스코트 캐릭터 시스템
 
-### 페이지 구성
+### 💬 RAG Chat — 스트리밍 응답 + 소스 문서 미리보기
 
-| 페이지 | 경로 | 설명 |
-|--------|------|------|
-| Chat | `/chat` | RAG 기반 AI 채팅 (스트리밍, 소스 표시) |
-| PARA Dashboard | `/para` | 프로젝트 진척도 & Stale 탐지 대시보드 |
-| Embedding | `/embedding` | 임베딩 상태 시각화 (Plotly.js) |
-| Settings | `/settings` | LLM 모델, API 키, Vault 경로 설정 |
+<video src="docs/video/chatting.mp4" controls width="100%"></video>
+
+- 실시간 스트리밍 응답 (SSE)
+- 📚 Sources 아코디언 → 참고 MD 파일 클릭 시 Sheet 슬라이드
+- Topic/Session 기반 대화 관리
+
+### 📊 PARA Dashboard — 프로젝트 진척도
+
+<video src="docs/video/project.mp4" controls width="100%"></video>
+
+- Stale 프로젝트 자동 탐지 (30일 미수정)
+- 프로젝트별 진척도 차트
+
+### 🔮 Embedding Visualization — 벡터 공간 탐험
+
+<video src="docs/video/embedding-final.mp4" controls width="100%"></video>
+
+- t-SNE 기반 2D/3D 시각화 (Plotly.js)
+- 카테고리별 색상 클러스터링
+- 호버 시 문서 내용 미리보기
+
+### ⚙️ Settings — 모델 & API 설정
+
+<video src="docs/video/setting.mp4" controls width="100%"></video>
+
+- LLM/Embedding 모델 실시간 교체
+- 로컬 모델 다운로드 상태 확인
 
 ### 기술 스택
 
