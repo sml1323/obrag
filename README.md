@@ -16,6 +16,10 @@ PARA 방법론 기반 프로젝트 관리와 에빙하우스 복습 엔진을 �
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector_DB-FF6F00?style=for-the-badge)
 ![SQLModel](https://img.shields.io/badge/SQLModel-ORM-4B8BBE?style=for-the-badge)
 
+<br/>
+
+<video src="docs/video/chatting.mp4" controls width="100%"></video>
+
 </div>
 
 <br/>
