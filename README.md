@@ -18,7 +18,7 @@ PARA 방법론 기반 프로젝트 관리와 에빙하우스 복습 엔진을 �
 
 <br/>
 
-<video src="docs/video/chatting.mp4" controls loop muted width="100%"></video>
+<video src="https://github.com/user-attachments/assets/15c993da-600b-4da0-ba38-da105f6b11c7" controls loop muted width="100%"></video>
 
 </div>
 
@@ -176,7 +176,7 @@ class LLMStrategy(Protocol):
 
 ### 💬 RAG Chat — 스트리밍 응답 + 소스 문서 미리보기
 
-<video src="docs/video/chatting.mp4" controls loop muted width="100%"></video>
+<video src="https://github.com/user-attachments/assets/15c993da-600b-4da0-ba38-da105f6b11c7" controls loop muted width="100%"></video>
 
 - 실시간 스트리밍 응답 (SSE)
 - 📚 Sources 아코디언 → 참고 MD 파일 클릭 시 Sheet 슬라이드
@@ -184,14 +184,14 @@ class LLMStrategy(Protocol):
 
 ### 📊 PARA Dashboard — 프로젝트 진척도
 
-<video src="docs/video/project.mp4" controls loop muted width="100%"></video>
+<video src="https://github.com/user-attachments/assets/cdeaeef8-f1ee-45b4-8fc3-fee2b0559c28" controls loop muted width="100%"></video>
 
 - Stale 프로젝트 자동 탐지 (30일 미수정)
 - 프로젝트별 진척도 차트
 
 ### 🔮 Embedding Visualization — 벡터 공간 탐험
 
-<video src="docs/video/embedding-final.mp4" controls loop muted width="100%"></video>
+<video src="https://github.com/user-attachments/assets/d4ab599a-0582-48e7-bcc8-4ab532eae8e8" controls loop muted width="100%"></video>
 
 - t-SNE 기반 2D/3D 시각화 (Plotly.js)
 - 카테고리별 색상 클러스터링
@@ -199,7 +199,7 @@ class LLMStrategy(Protocol):
 
 ### ⚙️ Settings — 모델 & API 설정
 
-<video src="docs/video/setting.mp4" controls loop muted width="100%"></video>
+<video src="https://github.com/user-attachments/assets/22689d7a-1ee3-4854-ad00-2348b7384604" controls loop muted width="100%"></video>
 
 - LLM/Embedding 모델 실시간 교체
 - 로컬 모델 다운로드 상태 확인
