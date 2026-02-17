@@ -18,7 +18,7 @@ PARA 방법론 기반 프로젝트 관리와 에빙하우스 복습 엔진을 �
 
 <br/>
 
-<video src="docs/video/chatting.mp4" controls width="100%"></video>
+![OBRAG Demo](docs/video/gif/chatting.gif)
 
 </div>
 
@@ -176,7 +176,7 @@ class LLMStrategy(Protocol):
 
 ### 💬 RAG Chat — 스트리밍 응답 + 소스 문서 미리보기
 
-<video src="docs/video/chatting.mp4" controls width="100%"></video>
+![RAG Chat Demo](docs/video/gif/chatting.gif)
 
 - 실시간 스트리밍 응답 (SSE)
 - 📚 Sources 아코디언 → 참고 MD 파일 클릭 시 Sheet 슬라이드
@@ -184,14 +184,14 @@ class LLMStrategy(Protocol):
 
 ### 📊 PARA Dashboard — 프로젝트 진척도
 
-<video src="docs/video/project.mp4" controls width="100%"></video>
+![PARA Dashboard Demo](docs/video/gif/project.gif)
 
 - Stale 프로젝트 자동 탐지 (30일 미수정)
 - 프로젝트별 진척도 차트
 
 ### 🔮 Embedding Visualization — 벡터 공간 탐험
 
-<video src="docs/video/embedding-final.mp4" controls width="100%"></video>
+![Embedding Visualization Demo](docs/video/gif/embedding.gif)
 
 - t-SNE 기반 2D/3D 시각화 (Plotly.js)
 - 카테고리별 색상 클러스터링
@@ -199,7 +199,7 @@ class LLMStrategy(Protocol):
 
 ### ⚙️ Settings — 모델 & API 설정
 
-<video src="docs/video/setting.mp4" controls width="100%"></video>
+![Settings Demo](docs/video/gif/setting.gif)
 
 - LLM/Embedding 모델 실시간 교체
 - 로컬 모델 다운로드 상태 확인
