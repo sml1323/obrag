@@ -199,7 +199,7 @@ class LLMStrategy(Protocol):
 
 ### ⚙️ Settings — 모델 & API 설정
 
-<video src="https://github.com/user-attachments/assets/22689d7a-1ee3-4854-ad00-2348b7384604" controls loop muted width="100%"></video>
+<video src="https://github.com/user-attachments/assets/b96d3a6a-4f61-4066-830b-1b54475bd671" controls loop muted width="100%"></video>
 
 - LLM/Embedding 모델 실시간 교체
 - 로컬 모델 다운로드 상태 확인
