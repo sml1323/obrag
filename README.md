@@ -184,7 +184,7 @@ class LLMStrategy(Protocol):
 
 ### 📊 PARA Dashboard — 프로젝트 진척도
 
-<video src="https://github.com/user-attachments/assets/cdeaeef8-f1ee-45b4-8fc3-fee2b0559c28" controls loop muted width="100%"></video>
+<video src="https://github.com/user-attachments/assets/d4b8958d-bd06-4c7f-95a9-ce4d8f971b40" controls loop muted width="100%"></video>
 
 - Stale 프로젝트 자동 탐지 (30일 미수정)
 - 프로젝트별 진척도 차트
