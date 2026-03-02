@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>OBRAG Data Flow Diagram</title>
+<style>
+  @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Pretendard', -apple-system, sans-serif;
+    background: #fff;
+    display: flex;
+    justify-content: center;
+    padding: 30px;
+  }
+
+  .container {
+    width: 900px;
+    padding: 30px;
+  }
+
+  .title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #121314;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    font-size: 13px;
+    color: #888;
+    text-align: center;
+    margin-bottom: 30px;
+  }
+
+  .flows {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .flow {
+    border-radius: 14px;
+    padding: 20px;
+  }
+
+  .flow-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .flow-desc {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 16px;
+  }
+
+  /* Sync flow */
+  .sync-flow {
+    background: #F0FBF4;
+    border: 1px solid #C5E8D0;
+  }
+  .sync-flow .flow-title { color: #1A8B4D; }
+
+  /* Query flow */
+  .query-flow {
+    background: #F0F4FF;
+    border: 1px solid #C5D5FF;
+  }
+  .query-flow .flow-title { color: #2E6FF2; }
+
+  /* Steps */
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 6px;
+    position: relative;
+  }
+
+  .step-num {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .sync-flow .step-num { background: #1A8B4D; }
+  .query-flow .step-num { background: #2E6FF2; }
+
+  .step-content {
+    flex: 1;
+    background: #fff;
+    border-radius: 8px;
+    padding: 10px 14px;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+
+  .step-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 2px;
+  }
+
+  .step-detail {
+    font-size: 10px;
+    color: #888;
+    line-height: 1.4;
+  }
+
+  .step-code {
+    font-size: 9px;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    color: #666;
+    background: #F5F5F5;
+    padding: 2px 6px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-top: 3px;
+  }
+
+  /* Arrow between steps */
+  .step-arrow {
+    display: flex;
+    justify-content: center;
+    padding: 2px 0 2px 13px;
+    margin-bottom: 2px;
+  }
+  .step-arrow .sarrow {
+    width: 1.5px;
+    height: 14px;
+    position: relative;
+  }
+  .sync-flow .sarrow { background: #B8E8CA; }
+  .query-flow .sarrow { background: #C5D5FF; }
+
+  .sarrow::after {
+    content: '';
+    position: absolute;
+    bottom: -3px;
+    left: -3px;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+  }
+  .sync-flow .sarrow::after { border-top: 5px solid #B8E8CA; }
+  .query-flow .sarrow::after { border-top: 5px solid #C5D5FF; }
+
+  /* Highlight box */
+  .highlight {
+    margin-top: 14px;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .sync-flow .highlight {
+    background: #E0F5E8;
+    border: 1px solid #B8E8CA;
+    color: #1A8B4D;
+  }
+
+  .query-flow .highlight {
+    background: #E5EDFF;
+    border: 1px solid #C5D5FF;
+    color: #2E6FF2;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="title">데이터 흐름도</div>
+  <div class="subtitle">Obsidian RAG — Document Sync & RAG Query Pipeline</div>
+
+  <div class="flows">
+
+    <!-- Sync Flow -->
+    <div class="flow sync-flow">
+      <div class="flow-title">📥 Document Sync Flow</div>
+      <div class="flow-desc">Vault 변경 감지 → 증분 동기화</div>
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-name">📁 Obsidian Vault 스캔</div>
+          <div class="step-detail">FolderScanner가 Vault 경로의 .md 파일 목록 스캔</div>
+        </div>
+      </div>
+      <div class="step-arrow"><div class="sarrow"></div></div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-name">🔍 변경 파일 감지</div>
+          <div class="step-detail">FileTracker가 파일 해시(SHA-256) 비교로 추가/수정/삭제 분류</div>
+          <div class="step-code">added · modified · deleted · unchanged</div>
+        </div>
+      </div>
+      <div class="step-arrow"><div class="sarrow"></div></div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-name">✂️ Semantic Chunking</div>
+          <div class="step-detail">마크다운 구조 인식 청킹. 2-Pass 전처리로 코드 블록 내 # 보호</div>
+          <div class="step-code">min_chunk: 200 · max_chunk: 1500</div>
+        </div>
+      </div>
+      <div class="step-arrow"><div class="sarrow"></div></div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-name">🧮 벡터 임베딩</div>
+          <div class="step-detail">EmbeddingStrategy로 텍스트 → 벡터 변환</div>
+          <div class="step-code">OpenAI | E5 | SentenceTransformer | Ollama</div>
+        </div>
+      </div>
+      <div class="step-arrow"><div class="sarrow"></div></div>
+
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-content">
+          <div class="step-name">💾 ChromaDB Upsert</div>
+          <div class="step-detail">변경분만 Upsert, 삭제 파일은 ID Diff로 자동 정리</div>
+          <div class="step-code">upsert() · delete() · SyncRegistry 기록</div>
+        </div>
+      </div>
+
+      <div class="highlight">
+        ✅ 해시 기반 증분 동기화로 전체 재처리 없이 변경분만 처리
+      </div>
+    </div>
+
+    <!-- Query Flow -->
+    <div class="flow query-flow">
+      <div class="flow-title">💬 RAG Query Flow</div>
+      <div class="flow-desc">사용자 질문 → AI 응답 생성</div>
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-name">💭 사용자 질문 입력</div>
+          <div class="step-detail">Next.js 프론트엔드에서 REST API로 전달</div>
+        </div>
+      </div>
+      <div class="step-arrow"><div class="sarrow"></div></div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-name">🔎 벡터 유사도 검색</div>
+          <div class="step-detail">Retriever가 ChromaDB에서 Top-K 유사 청크 검색</div>
+          <div class="step-code">L2 Distance → Score: 1/(1+d)</div>
+        </div>
+      </div>
+      <div class="step-arrow"><div class="sarrow"></div></div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-name">🎯 LLM Reranking</div>
+          <div class="step-detail">검색 결과를 LLM으로 재평가하여 관련성 높은 문서 선별</div>
+          <div class="step-code">Relevance Scoring · Context Filtering</div>
+        </div>
+      </div>
+      <div class="step-arrow"><div class="sarrow"></div></div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-name">📝 프롬프트 조립</div>
+          <div class="step-detail">PromptBuilder가 컨텍스트 + 이력 + 질문을 템플릿에 주입</div>
+          <div class="step-code">System · Context · History · User</div>
+        </div>
+      </div>
+      <div class="step-arrow"><div class="sarrow"></div></div>
+
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-content">
+          <div class="step-name">🤖 LLM 응답 생성</div>
+          <div class="step-detail">LLMStrategy Protocol로 런타임 모델 선택</div>
+          <div class="step-code">OpenAI | Gemini | Ollama</div>
+        </div>
+      </div>
+      <div class="step-arrow"><div class="sarrow"></div></div>
+
+      <div class="step">
+        <div class="step-num">6</div>
+        <div class="step-content">
+          <div class="step-name">📡 SSE 스트리밍 응답</div>
+          <div class="step-detail">Server-Sent Events로 실시간 토큰 단위 전송</div>
+          <div class="step-code">stream_generate() → EventStream</div>
+        </div>
+      </div>
+
+      <div class="highlight">
+        ⚡ 검색 → 재랭킹 → 생성의 3단계 파이프라인, 실시간 스트리밍
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

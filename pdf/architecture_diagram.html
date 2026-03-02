@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>OBRAG System Architecture</title>
+    <style>
+      @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css");
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          "Pretendard",
+          -apple-system,
+          sans-serif;
+        background: #fff;
+        display: flex;
+        justify-content: center;
+        padding: 30px;
+      }
+
+      .container {
+        width: 900px;
+        padding: 30px;
+      }
+
+      .title {
+        font-size: 22px;
+        font-weight: 700;
+        color: #121314;
+        text-align: center;
+        margin-bottom: 8px;
+      }
+
+      .subtitle {
+        font-size: 13px;
+        color: #888;
+        text-align: center;
+        margin-bottom: 28px;
+      }
+
+      /* Layer Styles */
+      .layer {
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 8px;
+        position: relative;
+      }
+
+      .layer-label {
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .layer-label .tag {
+        font-size: 10px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-weight: 500;
+      }
+
+      /* Frontend Layer */
+      .frontend {
+        background: #f0f4ff;
+        border: 1px solid #d0dbff;
+      }
+      .frontend .layer-label {
+        color: #2e6ff2;
+      }
+      .frontend .tag {
+        background: #2e6ff2;
+        color: #fff;
+      }
+
+      .frontend-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+      }
+
+      .fe-box {
+        background: #fff;
+        border: 1px solid #d0dbff;
+        border-radius: 8px;
+        padding: 12px 10px;
+        text-align: center;
+      }
+      .fe-box .name {
+        font-size: 12px;
+        font-weight: 600;
+        color: #2e6ff2;
+        margin-bottom: 3px;
+      }
+      .fe-box .desc {
+        font-size: 10px;
+        color: #888;
+      }
+
+      /* Arrow connector */
+      .connector {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 4px 0;
+      }
+      .connector .arrow {
+        width: 2px;
+        height: 20px;
+        background: #aaa;
+        position: relative;
+      }
+      .connector .arrow::after {
+        content: "";
+        position: absolute;
+        bottom: -5px;
+        left: -4px;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 6px solid #aaa;
+      }
+
+      /* API bar */
+      .api-bar {
+        background: linear-gradient(135deg, #2e6ff2, #5c8ef5);
+        color: #fff;
+        border-radius: 8px;
+        padding: 10px 20px;
+        text-align: center;
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 16px;
+      }
+      .api-bar .endpoint {
+        font-size: 10px;
+        font-weight: 400;
+        opacity: 0.8;
+      }
+
+      /* Backend Layer */
+      .backend {
+        background: #fafbfc;
+        border: 1px solid #e5e7eb;
+      }
+      .backend .layer-label {
+        color: #333;
+      }
+      .backend .tag {
+        background: #555;
+        color: #fff;
+      }
+
+      .backend-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .module-group {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 14px;
+      }
+      .module-group .group-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: #444;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .module-group .group-title .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+
+      .module-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .module-item {
+        font-size: 11px;
+        padding: 5px 10px;
+        border-radius: 6px;
+        font-weight: 500;
+        border: 1px solid;
+      }
+
+      .mi-blue {
+        background: #eef3ff;
+        border-color: #c5d5ff;
+        color: #2e6ff2;
+      }
+      .mi-green {
+        background: #eafbf0;
+        border-color: #b8e8ca;
+        color: #1a8b4d;
+      }
+      .mi-orange {
+        background: #fff5ec;
+        border-color: #ffdcb8;
+        color: #d4710a;
+      }
+
+      /* Protocol section */
+      .protocol-section {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-top: 12px;
+      }
+
+      .protocol-card {
+        background: #fff;
+        border: 2px dashed #c5d5ff;
+        border-radius: 10px;
+        padding: 12px 14px;
+        text-align: center;
+      }
+      .protocol-card .proto-name {
+        font-size: 11px;
+        font-weight: 700;
+        color: #2e6ff2;
+        margin-bottom: 6px;
+        letter-spacing: -0.3px;
+      }
+      .protocol-card .proto-label {
+        font-size: 9px;
+        color: #888;
+        margin-bottom: 6px;
+      }
+      .adapters {
+        display: flex;
+        justify-content: center;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+      .adapter {
+        font-size: 10px;
+        padding: 3px 8px;
+        border-radius: 12px;
+        background: #f3f5fa;
+        color: #555;
+        border: 1px solid #e5e7eb;
+      }
+
+      /* Data Layer */
+      .data-layer {
+        background: #fff9f0;
+        border: 1px solid #f0e4d0;
+      }
+      .data-layer .layer-label {
+        color: #a67c4a;
+      }
+      .data-layer .tag {
+        background: #d4710a;
+        color: #fff;
+      }
+
+      .data-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 10px;
+      }
+
+      .db-box {
+        background: #fff;
+        border: 1px solid #e5ddd0;
+        border-radius: 10px;
+        padding: 14px;
+        text-align: center;
+      }
+      .db-box .icon {
+        font-size: 24px;
+        margin-bottom: 4px;
+      }
+      .db-box .db-name {
+        font-size: 12px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 2px;
+      }
+      .db-box .db-desc {
+        font-size: 10px;
+        color: #888;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="title">시스템 아키텍처</div>
+      <div class="subtitle">Obsidian RAG — 개인 지식 관리 AI 풀스택 시스템</div>
+
+      <!-- Frontend -->
+      <div class="layer frontend">
+        <div class="layer-label">
+          <span class="tag">Frontend</span>
+          Next.js 16 + React 19
+        </div>
+        <div class="frontend-grid">
+          <div class="fe-box">
+            <div class="name">💬 RAG Chat</div>
+            <div class="desc">SSE 스트리밍 응답</div>
+          </div>
+          <div class="fe-box">
+            <div class="name">📊 PARA Dashboard</div>
+            <div class="desc">프로젝트 진척도 관리</div>
+          </div>
+          <div class="fe-box">
+            <div class="name">🔮 Embedding Viz</div>
+            <div class="desc">t-SNE 3D 시각화</div>
+          </div>
+          <div class="fe-box">
+            <div class="name">⚙️ Settings</div>
+            <div class="desc">모델/키/Vault 설정</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="connector"><div class="arrow"></div></div>
+
+      <!-- API Bar -->
+      <div class="api-bar">
+        REST API (FastAPI)
+        <span class="endpoint"
+          >/chat · /sync · /embedding · /session · /vault · /para · /project ·
+          /settings</span
+        >
+      </div>
+
+      <div class="connector"><div class="arrow"></div></div>
+
+      <!-- Backend -->
+      <div class="layer backend">
+        <div class="layer-label">
+          <span class="tag">Backend Core</span>
+          Python
+        </div>
+
+        <div class="backend-grid">
+          <div class="module-group">
+            <div class="group-title">
+              <span class="dot" style="background: #2e6ff2"></span>
+              RAG Pipeline
+            </div>
+            <div class="module-items">
+              <span class="module-item mi-blue">RAGChain</span>
+              <span class="module-item mi-blue">Retriever</span>
+              <span class="module-item mi-blue">PromptBuilder</span>
+              <span class="module-item mi-blue">Reranker</span>
+              <span class="module-item mi-blue">HybridSearch</span>
+            </div>
+          </div>
+          <div class="module-group">
+            <div class="group-title">
+              <span class="dot" style="background: #1a8b4d"></span>
+              Sync Engine
+            </div>
+            <div class="module-items">
+              <span class="module-item mi-green">IncrementalSyncer</span>
+              <span class="module-item mi-green">FolderScanner</span>
+              <span class="module-item mi-green">FileTracker</span>
+              <span class="module-item mi-green">SyncRegistry</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Protocol Interfaces -->
+        <div class="protocol-section">
+          <div class="protocol-card">
+            <div class="proto-label">Protocol Pattern</div>
+            <div class="proto-name">LLMStrategy</div>
+            <div class="adapters">
+              <span class="adapter">OpenAI</span>
+              <span class="adapter">Gemini</span>
+              <span class="adapter">Ollama</span>
+            </div>
+          </div>
+          <div class="protocol-card">
+            <div class="proto-label">Protocol Pattern</div>
+            <div class="proto-name">EmbeddingStrategy</div>
+            <div class="adapters">
+              <span class="adapter">OpenAI</span>
+              <span class="adapter">E5</span>
+              <span class="adapter">SentenceTransformer</span>
+              <span class="adapter">Ollama</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="connector"><div class="arrow"></div></div>
+
+      <!-- Data Layer -->
+      <div class="layer data-layer">
+        <div class="layer-label">
+          <span class="tag">Data</span>
+          Persistence Layer
+        </div>
+        <div class="data-grid">
+          <div class="db-box">
+            <div class="icon">📁</div>
+            <div class="db-name">Obsidian Vault</div>
+            <div class="db-desc">마크다운 노트 (.md)</div>
+          </div>
+          <div class="db-box">
+            <div class="icon">🔷</div>
+            <div class="db-name">ChromaDB</div>
+            <div class="db-desc">벡터 스토어 (Embedding)</div>
+          </div>
+          <div class="db-box">
+            <div class="icon">🗄️</div>
+            <div class="db-name">SQLite + SQLModel</div>
+            <div class="db-desc">세션 · 토픽 · 메타데이터</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
