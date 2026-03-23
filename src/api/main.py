@@ -38,6 +38,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     engine_module.create_db_and_tables()
     app.state.deps = init_app_state()
 
+    # Auto-configure vault_path from env var (Docker support)
+    import os
+    vault_path_env = os.getenv("VAULT_PATH")
+    if vault_path_env:
+        from sqlmodel import Session as DBSession
+        from core.domain.settings import Settings
+        engine = engine_module.engine
+        with DBSession(engine) as session:
+            settings = session.get(Settings, 1)
+            if not settings:
+                settings = Settings(id=1, vault_path=vault_path_env)
+                session.add(settings)
+            elif settings.vault_path != vault_path_env:
+                settings.vault_path = vault_path_env
+                session.add(settings)
+            session.commit()
+        print(f"[init] vault_path auto-configured: {vault_path_env}")
+
     yield
 
     # Shutdown (필요시 정리 로직)
@@ -63,8 +81,9 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
-            "http://localhost:3000"
-        ],  # 개발 환경용, 프로덕션에서는 특정 origin만 허용
+            "http://localhost:3000",
+            "http://frontend:3000",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

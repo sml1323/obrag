@@ -79,7 +79,12 @@ def _get_vault_root(
         p = Path(db_settings.vault_path)
         if p.is_dir():
             return p
-    return app_state.syncer.folder_scanner.root_path
+    if app_state.syncer is not None:
+        return app_state.syncer.folder_scanner.root_path
+    raise HTTPException(
+        status_code=400,
+        detail="No vault path configured. Please set vault_path in Settings.",
+    )
 
 
 def _normalize_unicode(s: str) -> str:

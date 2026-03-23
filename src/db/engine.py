@@ -1,3 +1,5 @@
+import os
+
 from sqlmodel import create_engine, SQLModel
 
 # Import all models so SQLModel.metadata knows about them
@@ -5,7 +7,7 @@ from core.domain.project import Project  # noqa: F401
 from core.domain.chat import Topic, Session, Message  # noqa: F401
 from core.domain.settings import Settings  # noqa: F401
 
-sqlite_file_name = "database.db"
+sqlite_file_name = os.getenv("DATABASE_PATH", "database.db")
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 
 engine = create_engine(sqlite_url, echo=False)

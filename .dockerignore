@@ -1,0 +1,59 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Node
+front/node_modules/
+front/.next/
+front/out/
+
+# Data (mounted as volumes)
+chroma_db/
+*.db
+note/
+data/
+
+# IDE & OS
+.vscode/
+.DS_Store
+
+# Tauri (not needed for Docker)
+front/src-tauri/
+
+# Build artifacts
+build/
+dist/
+
+# Git
+.git/
+.gitignore
+
+# AI tooling configs
+.agents/
+.agent/
+.claude/
+.codex/
+.gemini/
+.opencode/
+.codeboarding/
+.sisyphus/
+ai_workflow/
+character/
+
+# Planning files
+task_plan.md
+findings.md
+progress.md
+
+# Misc
+*.tmp
+*.ipynb
+notebook/
+pdf/
+reference/
+docs/
+tools/
+scripts/

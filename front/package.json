@@ -5,8 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:tauri": "node -e \"const fs=require('fs');if(fs.existsSync('.next')){fs.rmSync('.next',{recursive:true})};if(fs.existsSync('app/api')){fs.renameSync('app/api','.api-route-backup')}\" && next build; EXIT=$?; node -e \"const fs=require('fs');if(fs.existsSync('.api-route-backup')){fs.renameSync('.api-route-backup','app/api')}\" && exit $EXIT",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "@ai-sdk/react": "3.0.51",
@@ -71,6 +74,7 @@
     "@eslint/eslintrc": "^3.3.3",
     "@next/eslint-plugin-next": "^16.1.6",
     "@tailwindcss/postcss": "^4.1.9",
+    "@tauri-apps/cli": "^2.10.1",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",

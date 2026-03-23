@@ -1,0 +1,39 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Obsidian vault (호스트의 vault 경로를 여기에 지정)
+      - ${HOST_VAULT_PATH:-./_vault}:/data/vault:ro
+      # Persistent data
+      - chroma_data:/data/chroma_db
+      - sqlite_data:/data
+      - model_cache:/data/models
+    environment:
+      - VAULT_PATH=/data/vault
+      - CHROMA_PATH=/data/chroma_db
+      - DATABASE_PATH=/data/database.db
+      - HF_HOME=/data/models
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - BACKEND_INTERNAL_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  chroma_data:
+  sqlite_data:
+  model_cache:

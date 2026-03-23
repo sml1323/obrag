@@ -44,11 +44,11 @@ class AppState:
 
     chroma_store: ChromaStore
     rag_chain: RAGChain
-    syncer: IncrementalSyncer
+    syncer: Optional[IncrementalSyncer]
 
 
 def init_app_state(
-    chroma_path: str = "./chroma_db",
+    chroma_path: str | None = None,
     base_collection_name: str = "obsidian_notes",
     auto_derive_collection: bool = True,
 ) -> AppState:
@@ -98,6 +98,9 @@ def init_app_state(
 
     embedder = EmbedderFactory.create(embed_config)
 
+    if chroma_path is None:
+        chroma_path = os.getenv("CHROMA_PATH", "./chroma_db")
+
     if auto_derive_collection:
         collection_name = derive_collection_name(
             base_collection_name, embedder.model_name
@@ -122,8 +125,14 @@ def init_app_state(
     retriever = Retriever(chroma_store)
     rag_chain = RAGChain(retriever=retriever, llm=llm)
 
-    obsidian_path = os.getenv("OBSIDIAN_PATH", "./docs")
-    syncer = create_syncer(root_path=obsidian_path, chroma_store=chroma_store)
+    obsidian_path = os.getenv("VAULT_PATH", os.getenv("OBSIDIAN_PATH", "./docs"))
+    syncer = None
+    try:
+        syncer = create_syncer(root_path=obsidian_path, chroma_store=chroma_store)
+    except (FileNotFoundError, NotADirectoryError):
+        print(
+            f"[init] Vault path not found: {obsidian_path} — syncer disabled until configured via Settings."
+        )
 
     return AppState(
         chroma_store=chroma_store,
@@ -235,7 +244,13 @@ def get_chroma_store(request: Request) -> ChromaStore:
 
 def get_syncer(request: Request) -> IncrementalSyncer:
     """IncrementalSyncer 의존성 주입."""
-    return request.app.state.deps.syncer
+    syncer = request.app.state.deps.syncer
+    if syncer is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No vault path configured. Please set vault_path in Settings first.",
+        )
+    return syncer
 
 
 def get_session():

@@ -37,6 +37,7 @@ database.db
 *.sqlite
 sqlite3
 chroma_db/
+<MagicMock*/
 
 # Jupyter Notebooks
 .ipynb_checkpoints
@@ -60,5 +61,12 @@ xmlcov/
 # Docs (generated/draft)
 docs/RAG_IMPROVEMENT_RESEARCH.md
 
-# Scripts (local utilities)
-scripts/
+front/.api-route-backup/
+
+# Docker
+.env.docker
+
+# Planning files
+task_plan.md
+findings.md
+progress.md

@@ -15,6 +15,7 @@ PARA 방법론 기반 프로젝트 관리를 제공하는 **통합 지식 관리
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector_DB-FF6F00?style=for-the-badge)
 ![SQLModel](https://img.shields.io/badge/SQLModel-ORM-4B8BBE?style=for-the-badge)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 
 <br/>
 
@@ -291,6 +292,11 @@ obrag/
 │       ├── types/                # TypeScript 타입
 │       └── hooks/                # 커스텀 훅 (useChat, useSSE)
 │
+├── Dockerfile.backend            # 백엔드 Docker 이미지
+├── Dockerfile.frontend           # 프론트엔드 Docker 이미지
+├── docker-compose.yml            # 멀티 컨테이너 구성
+├── .env.docker                   # Docker 환경변수 템플릿
+│
 └── docs/                         # 문서
     ├── features/                 # 기능별 상세 문서
     ├── images/                   # 다이어그램, 스크린샷
@@ -302,20 +308,62 @@ obrag/
 
 ## 🚀 시작하기
 
-### 사전 요구사항
+### 🐳 Docker (권장)
+
+Docker Compose로 한 번에 실행:
+
+```bash
+git clone https://github.com/sml1323/obrag.git
+cd obrag
+
+# 실행 (HOST_VAULT_PATH에 Obsidian Vault 경로 지정)
+HOST_VAULT_PATH=/path/to/your/vault docker compose up -d
+```
+
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000/docs
+- `vault_path`는 `/data/vault`로 자동 설정됩니다.
+- API 키는 Frontend **Settings** 페이지에서 설정합니다.
+
+```
+┌─────────────────┐     ┌─────────────────┐
+│ frontend:3000   │────▶│  backend:8000   │
+│ (Next.js)       │     │  (FastAPI)      │
+└─────────────────┘     └────────┬────────┘
+                                 │
+                    ┌────────────┼────────────┐
+                    │            │            │
+               /data/vault  /data/chroma_db  /data/database.db
+               (volume)     (volume)         (volume)
+```
+
+#### Docker 볼륨 구성
+
+| 볼륨 | 컨테이너 경로 | 용도 |
+|------|--------------|------|
+| HOST_VAULT_PATH | `/data/vault` (read-only) | Obsidian Vault |
+| chroma_data | `/data/chroma_db` | 벡터 DB 저장소 |
+| sqlite_data | `/data/database.db` | 메타데이터 DB |
+| model_cache | `/data/models` | 임베딩 모델 캐시 |
+
+---
+
+### 🖥️ 로컬 개발
+
+#### 사전 요구사항
 
 - Python 3.12+
 - Node.js 18+
 - [uv](https://github.com/astral-sh/uv) (Python 패키지 매니저, 권장)
 
-### 1. 저장소 클론
+#### 1. 저장소 클론
 
 ```bash
 git clone https://github.com/sml1323/obrag.git
 cd obrag
 ```
 
-### 2. 백엔드 실행
+#### 2. 백엔드 실행
 
 ```bash
 # 의존성 설치
@@ -327,7 +375,7 @@ uvicorn api.main:app --reload --app-dir src
 
 API 문서 확인: http://localhost:8000/docs
 
-### 3. 프론트엔드 실행
+#### 3. 프론트엔드 실행
 
 ```bash
 cd front
@@ -337,7 +385,7 @@ npm run dev
 
 http://localhost:3000 에서 확인
 
-### 4. 초기 설정
+#### 4. 초기 설정
 
 > **`.env` 파일 없이** 프론트엔드 Settings 페이지에서 모든 설정을 관리합니다.
 
@@ -360,7 +408,7 @@ http://localhost:3000 에서 확인
 | **Phase 2** | ✅ 완료 | RAG 채팅 (멀티 LLM, 임베딩, RAGChain, FastAPI 엔드포인트) |
 | **Phase 2.5** | ✅ 완료 | 대화 저장소 (Topic/Session/Message CRUD, SQLite 연동) |
 | **Phase 3** | ✅ 완료 | PARA 대시보드 (프로젝트 스캔, Stale 탐지, Frontend UI) |
-| **Phase 4** | 📋 예정 | Tauri 데스크톱 앱 패키징 |
+| **Phase 4** | ✅ 완료 | Docker 컨테이너화 (docker-compose, 볼륨 마운트, 환경변수 기반 설정) |
 
 ---
 

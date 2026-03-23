@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { checkHealth } from "@/lib/api/health";
 import { getSettings } from "@/lib/api/settings";
 
@@ -12,7 +12,8 @@ interface SystemInfo {
   embeddingModel: string | null;
 }
 
-const POLL_INTERVAL = 30_000;
+const POLL_HEALTHY = 30_000;
+const POLL_RETRY = 2_000;
 
 export function SystemStatus() {
   const [info, setInfo] = useState<SystemInfo>({
@@ -22,6 +23,13 @@ export function SystemStatus() {
     embeddingProvider: null,
     embeddingModel: null,
   });
+
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const schedule = useCallback((fn: () => void, ms: number) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(fn, ms);
+  }, []);
 
   const refresh = useCallback(async () => {
     let online = false;
@@ -42,19 +50,21 @@ export function SystemStatus() {
           embeddingProvider: s.embedding_provider,
           embeddingModel: s.embedding_model,
         });
-        return;
       } catch {
-        /* settings fetch failed, still mark online */
+        setInfo((prev) => ({ ...prev, backendOnline: true }));
       }
+    } else {
+      setInfo((prev) => ({ ...prev, backendOnline: false }));
     }
 
-    setInfo((prev) => ({ ...prev, backendOnline: online }));
-  }, []);
+    schedule(() => refresh(), online ? POLL_HEALTHY : POLL_RETRY);
+  }, [schedule]);
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, POLL_INTERVAL);
-    return () => clearInterval(id);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [refresh]);
 
   return (
