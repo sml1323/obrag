@@ -70,3 +70,8 @@ front/.api-route-backup/
 task_plan.md
 findings.md
 progress.md
+
+# Build artifacts
+dist/
+build/
+*.pkg
