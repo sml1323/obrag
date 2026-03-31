@@ -16,6 +16,15 @@ __pycache__/
 /.codex/
 /.gemini/
 /.opencode/
+AGENTS.md
+ai_workflow/
+
+# AI workflow artifacts (prevent re-commit)
+docs/subtask/
+docs/spec/findings.md
+docs/code-quality-audit.md
+notebook/
+pdf/
 
 # Frontend
 front/node_modules/
@@ -75,3 +84,5 @@ progress.md
 dist/
 build/
 *.pkg
+포트폴리오.pdf
+포트폴리오_2.pdf
