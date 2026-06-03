@@ -75,6 +75,14 @@ class RAGChain:
     def prompt_builder(self) -> PromptBuilder:
         return self._prompt_builder
 
+    @property
+    def retriever(self) -> Retriever:
+        return self._retriever
+
+    @property
+    def llm(self) -> LLMStrategy:
+        return self._llm
+
     def query(
         self,
         question: str,
@@ -95,9 +103,9 @@ class RAGChain:
         Returns:
             RAGResponse (answer, retrieval_result, model, usage)
         """
-        # 1. 검색
+        # 1. 검색 (1회만 수행 후 컨텍스트로 포맷)
         retrieval_result = self._retriever.retrieve(question, top_k=top_k)
-        context = self._retriever.retrieve_with_context(question, top_k=top_k)
+        context = self._retriever.format_context(retrieval_result)
 
         # 2. 프롬프트 생성
         messages = self._prompt_builder.build(
@@ -141,9 +149,9 @@ class RAGChain:
         Returns:
             RAGResponse
         """
-        # 1. 검색
+        # 1. 검색 (1회만 수행 후 컨텍스트로 포맷)
         retrieval_result = self._retriever.retrieve(question, top_k=top_k)
-        context = self._retriever.retrieve_with_context(question, top_k=top_k)
+        context = self._retriever.format_context(retrieval_result)
 
         # 2. 프롬프트 생성 (이력 포함)
         messages = self._prompt_builder.build_with_history(
@@ -181,9 +189,9 @@ class RAGChain:
         Returns:
             (retrieval_result, content_generator) 튜플
         """
-        # 1. 검색
+        # 1. 검색 (1회만 수행 후 컨텍스트로 포맷)
         retrieval_result = self._retriever.retrieve(question, top_k=top_k)
-        context = self._retriever.retrieve_with_context(question, top_k=top_k)
+        context = self._retriever.format_context(retrieval_result)
 
         # 2. 프롬프트 생성
         if history:

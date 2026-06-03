@@ -5,16 +5,14 @@ RAG 기반 채팅 엔드포인트를 제공합니다.
 """
 
 import json
-from typing import AsyncGenerator
+from typing import Generator
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from api.deps import get_rag_chain, get_session
+from api.deps import get_rag_chain, get_session, build_llm
 from core.domain.chat import Session, Message, Topic
 from core.rag import RAGChain
-from core.llm import LLMFactory
-from config.models import OpenAILLMConfig, GeminiLLMConfig, OllamaLLMConfig
 from sqlmodel import Session as DBSession
 from dtypes.api import (
     ChatRequest,
@@ -111,6 +109,7 @@ def _get_dynamic_chain(
     _validate_api_key(provider, api_key)
 
     try:
+        base_url = None
         if provider == "openai":
             valid_models = [
                 "gpt-4o",
@@ -121,28 +120,20 @@ def _get_dynamic_chain(
             ]
             if model not in valid_models:
                 model = "gpt-4o-mini"
-            config = OpenAILLMConfig(model_name=model, api_key=api_key)
         elif provider == "gemini":
             valid_models = ["gemini-1.5-pro", "gemini-1.5-flash"]
             if model not in valid_models:
                 model = "gemini-1.5-flash"
-            config = GeminiLLMConfig(
-                model_name=model,
-                api_key=api_key,
-            )
         elif provider == "ollama":
-            ollama_endpoint = (
+            base_url = (
                 db_settings.ollama_endpoint if db_settings else "http://localhost:11434"
             )
-            config = OllamaLLMConfig(
-                model_name=model or "llama3",
-                base_url=ollama_endpoint,
-            )
+            model = model or "llama3"
         else:
             return default_chain
 
-        llm = LLMFactory.create(config)
-        return RAGChain(retriever=default_chain._retriever, llm=llm)
+        llm = build_llm(provider=provider, model=model, api_key=api_key, base_url=base_url)
+        return RAGChain(retriever=default_chain.retriever, llm=llm)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -155,7 +146,7 @@ def _get_dynamic_chain(
 
 
 @router.post("", response_model=ChatResponse)
-async def chat(
+def chat(
     request: ChatRequest,
     chain: RAGChain = Depends(get_rag_chain),
     db: DBSession = Depends(get_session),
@@ -164,6 +155,8 @@ async def chat(
     단일 질의 RAG 응답.
 
     동기 방식으로 전체 응답을 한 번에 반환합니다.
+    블로킹 RAG/LLM 호출이 이벤트 루프를 막지 않도록 sync 핸들러로 선언
+    (Starlette가 스레드풀에서 실행).
     """
     history = []
 
@@ -203,7 +196,7 @@ async def chat(
 
 
 @router.post("/stream")
-async def chat_stream(
+def chat_stream(
     request: ChatRequest,
     chain: RAGChain = Depends(get_rag_chain),
     db: DBSession = Depends(get_session),
@@ -234,12 +227,12 @@ async def chat_stream(
 
     sources = _convert_retrieval_to_sources(retrieval_result)
 
-    async def event_generator() -> AsyncGenerator[str, None]:
+    def event_generator() -> Generator[str, None, None]:
         # 첫 번째 이벤트: sources 정보
         start_data = {
             "type": "start",
             "sources": [s.model_dump() for s in sources],
-            "model": active_chain._llm.model_name,
+            "model": active_chain.llm.model_name,
         }
         yield f"data: {json.dumps(start_data)}\n\n"
 
@@ -250,7 +243,7 @@ async def chat_stream(
             chunk_data = {"type": "content", "content": chunk}
             yield f"data: {json.dumps(chunk_data)}\n\n"
 
-        usage = getattr(active_chain._llm, "_last_stream_usage", None) or {}
+        usage = getattr(active_chain.llm, "_last_stream_usage", None) or {}
         yield f"data: {json.dumps({'type': 'done', 'usage': usage})}\n\n"
 
         if request.session_id:
@@ -267,7 +260,7 @@ async def chat_stream(
 
 
 @router.post("/history", response_model=ChatResponse)
-async def chat_with_history(
+def chat_with_history(
     request: ChatHistoryRequest,
     chain: RAGChain = Depends(get_rag_chain),
 ) -> ChatResponse:

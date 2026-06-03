@@ -4,39 +4,27 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlmodel import Session
 
-from api.deps import get_syncer, get_session, get_chroma_store
+from api.deps import (
+    get_syncer,
+    get_session,
+    get_chroma_store,
+    build_embedder,
+    build_store,
+)
 from core.sync.incremental_syncer import IncrementalSyncer, SyncResult, create_syncer
 from core.domain.project import Project
 from core.domain.settings import Settings
-from core.embedding import EmbedderFactory
-from config.models import (
-    OpenAIEmbeddingConfig,
-    OllamaEmbeddingConfig,
-    SentenceTransformerEmbeddingConfig,
-)
-from db.chroma_store import ChromaStore, derive_collection_name
+from db.chroma_store import ChromaStore
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
 
 def _create_embedder_from_settings(settings: Settings):
+    """Settings 기반 (캐시된) Embedder 생성. 인덱싱/쿼리가 동일 인스턴스를 공유한다."""
     provider = (settings.embedding_provider or "openai").lower()
-    model = settings.embedding_model or ""
 
-    if provider == "ollama":
-        if not model:
-            model = "nomic-embed-text"
-        config = OllamaEmbeddingConfig(
-            model_name=model,
-            base_url=settings.ollama_endpoint or "http://localhost:11434",
-        )
-    elif provider == "sentence_transformers":
-        if not model:
-            model = "BAAI/bge-m3"
-        config = SentenceTransformerEmbeddingConfig(model_name=model)
-    else:
-        if not model:
-            model = "text-embedding-3-small"
+    # OpenAI 계열은 인덱싱에 키가 반드시 필요하므로 사전 검증으로 친절한 에러 제공
+    if provider not in ("ollama", "sentence_transformers", "multilingual_e5", "local"):
         api_key = settings.embedding_api_key or settings.llm_api_key
         if not api_key:
             raise HTTPException(
@@ -48,16 +36,17 @@ def _create_embedder_from_settings(settings: Settings):
                 status_code=400,
                 detail="Invalid OpenAI API key format. API key must start with 'sk-'. Please update in Settings.",
             )
-        config = OpenAIEmbeddingConfig(
-            model_name=model,  # type: ignore
-            api_key=api_key,
-        )
 
     try:
-        embedder = EmbedderFactory.create(config)
+        embedder, model_name = build_embedder(
+            provider=provider,
+            model=settings.embedding_model or None,
+            api_key=settings.embedding_api_key or settings.llm_api_key,
+            base_url=settings.ollama_endpoint,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return embedder, model
+    return embedder, model_name
 
 
 def _create_store_for_settings(
@@ -66,18 +55,13 @@ def _create_store_for_settings(
     base_collection_name: str = "obsidian_notes",
 ) -> ChromaStore:
     """
-    Settings 기반으로 ChromaStore 생성.
+    Settings 기반으로 (캐시된) ChromaStore 생성.
 
-    임베딩 모델별로 다른 collection을 사용합니다.
+    임베딩 모델별로 다른 collection을 사용하며, deps.build_store 의 캐시를 통해
+    쿼리 경로(get_rag_chain)와 동일한 store/embedder 인스턴스를 공유한다.
     """
     embedder, model_name = _create_embedder_from_settings(settings)
-    collection_name = derive_collection_name(base_collection_name, model_name)
-
-    return ChromaStore(
-        persist_path=base_persist_path,
-        collection_name=collection_name,
-        embedder=embedder,
-    )
+    return build_store(base_persist_path, base_collection_name, embedder, model_name)
 
 
 @router.post("/trigger", response_model=SyncResult)

@@ -132,25 +132,23 @@ class Retriever:
             return 0.0
         return 1.0 / (1.0 + distance)
 
-    def retrieve_with_context(
-        self,
-        query: str,
-        top_k: int = 5,
+    @staticmethod
+    def format_context(
+        result: RetrievalResult,
         context_format: str = "numbered",
     ) -> str:
         """
-        검색 결과를 프롬프트에 주입할 수 있는 컨텍스트 문자열로 반환.
+        이미 검색된 RetrievalResult를 프롬프트 주입용 컨텍스트 문자열로 변환.
+
+        검색을 다시 수행하지 않으므로, retrieve() 결과를 재사용할 때 사용한다.
 
         Args:
-            query: 검색 쿼리
-            top_k: 반환할 최대 결과 수
+            result: retrieve()가 반환한 검색 결과
             context_format: "numbered" | "simple"
 
         Returns:
             포맷팅된 컨텍스트 문자열
         """
-        result = self.retrieve(query, top_k=top_k)
-
         if not result.chunks:
             return ""
 
@@ -165,3 +163,23 @@ class Retriever:
 
         else:  # simple
             return "\n\n---\n\n".join(c.text for c in result.chunks)
+
+    def retrieve_with_context(
+        self,
+        query: str,
+        top_k: int = 5,
+        context_format: str = "numbered",
+    ) -> str:
+        """
+        검색 + 컨텍스트 포맷을 한 번에 수행 (하위호환용 편의 메서드).
+
+        Args:
+            query: 검색 쿼리
+            top_k: 반환할 최대 결과 수
+            context_format: "numbered" | "simple"
+
+        Returns:
+            포맷팅된 컨텍스트 문자열
+        """
+        result = self.retrieve(query, top_k=top_k)
+        return self.format_context(result, context_format)
