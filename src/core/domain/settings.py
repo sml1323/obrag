@@ -60,19 +60,16 @@ class Settings(SQLModel, table=True):
 
     def mask_api_keys(self) -> "Settings":
         """
-        Returns a copy of the settings with API keys partially masked.
-        Example: "sk-proj-..." -> "sk-***abc"
+        Returns a copy of the settings with API keys fully masked.
+
+        키 일부(끝 3글자)도 노출하지 않는다 — 짧은/저엔트로피 키에서 부분 노출은
+        키 복원 단서를 줄 수 있으므로 존재 여부만 "***" 로 표시한다.
         """
         masked = Settings.model_validate(self.model_dump())
 
-        if masked.llm_api_key and len(masked.llm_api_key) > 3:
-            masked.llm_api_key = f"***{masked.llm_api_key[-3:]}"
-        elif masked.llm_api_key:
+        if masked.llm_api_key:
             masked.llm_api_key = "***"
-
-        if masked.embedding_api_key and len(masked.embedding_api_key) > 3:
-            masked.embedding_api_key = f"***{masked.embedding_api_key[-3:]}"
-        elif masked.embedding_api_key:
+        if masked.embedding_api_key:
             masked.embedding_api_key = "***"
 
         return masked

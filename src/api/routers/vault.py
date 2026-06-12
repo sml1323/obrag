@@ -166,6 +166,11 @@ def get_vault_document(
 
     # Priority 1: relative_path 직접 조회
     if relative_path:
+        # 보안: 절대경로 / 상위참조(..) 를 조기 거부 (vault root 밖 접근 방지)
+        if os.path.isabs(relative_path) or ".." in Path(relative_path).parts:
+            raise HTTPException(
+                status_code=400, detail="Invalid relative_path"
+            )
         file_path = _find_file_by_relative_path(vault_root, relative_path)
 
     # Priority 2: source 파일명으로 rglob 폴백
