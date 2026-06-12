@@ -73,6 +73,17 @@ async def get_model_status(model_id: str):
 @router.post("/models/download", response_model=DownloadResponse)
 async def start_model_download(request: DownloadRequest):
     model_manager = _model_manager()
+
+    # 보안: 임의 HuggingFace repo 다운로드/인스턴스화 방지 (allow-list)
+    if request.model_id not in model_manager.KNOWN_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Unknown model_id. Allowed models: "
+                + ", ".join(sorted(model_manager.KNOWN_MODELS))
+            ),
+        )
+
     info = model_manager.get_model_info(request.model_id)
 
     if info.status == model_manager.ModelStatus.READY:

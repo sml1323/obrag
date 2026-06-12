@@ -204,10 +204,15 @@ class ChromaStore:
         Returns:
             검색 결과 리스트 [{"text": ..., "metadata": ..., "distance": ...}, ...]
         """
-        query_params = {
-            "query_texts": [query_text],
-            "n_results": n_results,
-        }
+        # 쿼리 임베딩: embed_query 를 직접 사용해 query-side prefix 를 보장한다.
+        # ChromaDB 가 query_texts 를 처리하면 EmbeddingFunction.__call__(=embed_documents,
+        # E5 의 "passage:" prefix)로 임베딩되어, 비대칭 prefix 모델(E5)의 검색 품질이
+        # 저하된다. 문서는 passage, 쿼리는 query prefix 가 되도록 직접 임베딩한다.
+        query_params: dict = {"n_results": n_results}
+        if hasattr(self._embedder, "embed_query"):
+            query_params["query_embeddings"] = [self._embedder.embed_query(query_text)]
+        else:
+            query_params["query_texts"] = [query_text]
 
         if where:
             query_params["where"] = where

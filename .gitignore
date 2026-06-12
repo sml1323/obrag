@@ -84,5 +84,6 @@ progress.md
 dist/
 build/
 *.pkg
+*.tmp
 포트폴리오.pdf
 포트폴리오_2.pdf

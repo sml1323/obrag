@@ -4,14 +4,42 @@ FastAPI Application Entry Point
 Lifespan 관리, CORS 설정, 라우터 등록을 담당합니다.
 """
 
+import os
+import secrets
 from contextlib import asynccontextmanager
 from importlib import import_module
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from .deps import init_app_state
+
+
+# 토큰 인증을 적용하지 않는 공개 경로 (헬스체크 / API 문서)
+_PUBLIC_PATHS = {"/health", "/openapi.json", "/docs", "/redoc"}
+
+
+def _is_public_path(path: str) -> bool:
+    # "/docs" 자체와 "/docs/..." 만 공개. "/docsEVIL" 같은 과대매칭 방지.
+    return path in _PUBLIC_PATHS or path == "/docs" or path.startswith("/docs/")
+
+
+async def _token_auth_dispatch(request: Request, call_next):
+    """
+    선택적 Bearer 토큰 인증.
+
+    OBRAG_API_TOKEN 환경변수가 설정된 경우에만 토큰을 요구한다(기본 OFF → 동작 변화 없음).
+    CORS preflight(OPTIONS)와 공개 경로는 항상 통과. 비교는 상수시간(secrets).
+    """
+    token = os.getenv("OBRAG_API_TOKEN")
+    if token and request.method != "OPTIONS" and not _is_public_path(request.url.path):
+        provided = request.headers.get("Authorization", "")
+        if not secrets.compare_digest(provided, f"Bearer {token}"):
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
 
 
 # ============================================================================
@@ -77,7 +105,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS 설정
+    # 미들웨어 등록 순서 주의: 나중에 추가한 것이 더 바깥쪽(요청 시 먼저 실행).
+    # 인증을 먼저 등록하고 CORS 를 나중에 등록해 CORS 를 최외곽으로 둔다.
+    # → preflight(OPTIONS)는 CORS 가 처리해 인증에 닿지 않고,
+    #   인증이 반환하는 401 응답에도 CORS 헤더가 정상 부착된다.
+    app.add_middleware(BaseHTTPMiddleware, dispatch=_token_auth_dispatch)
+
+    # CORS 설정 (최외곽)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
